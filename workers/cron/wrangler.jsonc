@@ -1,0 +1,10 @@
+{
+  "$schema": "../../web/node_modules/wrangler/config-schema.json",
+  "name": "mastervlsi-cron",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  // 00:30 UTC = 06:00 IST
+  "triggers": { "crons": ["30 0 * * *"] },
+  "vars": { "ERP_URL": "https://erp.mastervlsi.com" }
+  // secret: npx wrangler secret put CRON_SECRET
+}
