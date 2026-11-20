@@ -15,8 +15,11 @@ export function RunExpiryButton() {
         disabled={pending}
         onClick={() =>
           start(async () => {
-            const out = await runExpiryAction();
-            setMsg(out.length ? `${out.length} notifications/expiries processed` : "Nothing due today");
+            const { processed, delivery } = await runExpiryAction();
+            const parts = [processed.length ? `${processed.length} reminder(s)/expiries recorded` : "Nothing due today"];
+            if (delivery?.configured) parts.push(`${delivery.sent} email(s) sent`);
+            else if (delivery?.pending) parts.push(`${delivery.pending} waiting — add RESEND_API_KEY to send emails`);
+            setMsg(parts.join(" · "));
           })
         }
       >

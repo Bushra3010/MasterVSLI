@@ -73,7 +73,7 @@ export default async function ValidityPage() {
           <ul className="space-y-2 text-sm">
             {notifications.map((n) => (
               <li key={n.id} className="flex justify-between gap-2">
-                <span>{name.get(n.student_id)} <span className="text-muted">· {titleCase(n.kind)}</span></span>
+                <span>{name.get(n.student_id)} <span className="text-muted">· {titleCase(n.kind)} · {n.sent_at ? "emailed" : "not sent yet"}</span></span>
                 <span className="text-xs whitespace-nowrap text-muted">{fmtDate(n.created_at)}</span>
               </li>
             ))}

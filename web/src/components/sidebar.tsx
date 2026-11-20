@@ -8,9 +8,11 @@ import {
   FileText,
   GraduationCap,
   IndianRupee,
+  KeyRound,
   LayoutDashboard,
   LogOut,
   Menu,
+  Settings,
   ShieldBan,
   Users,
   Briefcase,
@@ -30,11 +32,13 @@ const staffNav = [
   { href: "/access", label: "Access Control", icon: ShieldBan },
   { href: "/placements", label: "Placements", icon: Briefcase },
   { href: "/documents", label: "Letters & Certificates", icon: FileText },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 const studentNav = [
   { href: "/portal", label: "My Dashboard", icon: GraduationCap },
   { href: "/portal/drives", label: "Placement Drives", icon: Briefcase },
   { href: "/portal/documents", label: "My Documents", icon: BadgeCheck },
+  { href: "/portal/account", label: "Account", icon: KeyRound },
 ];
 
 export function Sidebar({ role, name, demo, signOut }: { role: string; name: string; demo: boolean; signOut: () => Promise<void> }) {

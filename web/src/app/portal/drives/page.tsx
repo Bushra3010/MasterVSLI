@@ -1,7 +1,7 @@
 import { Lock } from "lucide-react";
 import { Badge, Card, PageHeader, StatusBadge } from "@/components/ui";
 import { fmtDate } from "@/lib/format";
-import { getRepo } from "@/lib/server";
+import { getRepo, getStudentReadRepo } from "@/lib/server";
 import { requireStudent } from "@/lib/session";
 import { respondAction } from "../actions";
 
@@ -10,7 +10,7 @@ export const metadata = { title: "Placement drives" };
 export default async function PortalDrives() {
   const s = await requireStudent();
   const repo = await getRepo();
-  const p = await repo.profile(s.studentId);
+  const p = await (await getStudentReadRepo()).profile(s.studentId);
   const allowed = p?.student.status === "active" && p.access.find((a) => a.channel === "placement")?.enabled;
   const drives = allowed ? (await repo.drives()).filter((d) => d.status !== "closed") : [];
   const mine = new Map(p?.responses.map((r) => [r.drive_id, r]) ?? []);

@@ -75,6 +75,11 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
                 <input name={`d_${f.key}`} type={f.type ?? "text"} placeholder={f.placeholder} className="input" />
               </div>
             ))}
+            {tpl.audience === "staff" && !staff.length && (
+              <p className="text-xs text-brand">
+                No staff yet. <a href="/settings" className="underline">Add staff in Settings</a> first.
+              </p>
+            )}
             <button className="btn-primary w-full">Generate with QR & serial no.</button>
           </form>
         </Card>

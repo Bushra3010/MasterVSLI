@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // ERP pages are per-user and always dynamic; keep the classic request-time model.
   cacheComponents: false,
+  // student document uploads are capped at 5 MB in the app; leave room for multipart overhead
+  experimental: { serverActions: { bodySizeLimit: "6mb" } },
   turbopack: {
     rules: {
       "*.css": {

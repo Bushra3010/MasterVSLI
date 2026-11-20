@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Query, Store, TableName } from "./types";
 
+/** supabase-js sends undefined fields in bulk inserts as NULL, which defeats column defaults (e.g. id). */
+const clean = <T,>(rows: Partial<T>[]) =>
+  rows.map((r) => Object.fromEntries(Object.entries(r as Record<string, unknown>).filter(([, v]) => v !== undefined)));
+
 export class SupabaseStore implements Store {
   readonly kind = "supabase" as const;
   constructor(private db: SupabaseClient) {}
@@ -19,18 +23,23 @@ export class SupabaseStore implements Store {
   }
 
   async insert<T>(table: TableName, rows: Partial<T>[]): Promise<T[]> {
-    const { data, error } = await this.db.from(table).insert(rows as never).select("*");
+    const { data, error } = await this.db.from(table).insert(clean(rows) as never).select("*");
     if (error) throw new Error(`${table}: ${error.message}`);
     return (data ?? []) as T[];
   }
 
   async update<T>(table: TableName, match: Record<string, string | number>, patch: Partial<T>) {
-    const { error } = await this.db.from(table).update(patch as never).match(match);
+    const { error } = await this.db.from(table).update(clean([patch])[0] as never).match(match);
     if (error) throw new Error(`${table}: ${error.message}`);
   }
 
   async upsert<T>(table: TableName, rows: Partial<T>[], onConflict: string) {
-    const { error } = await this.db.from(table).upsert(rows as never, { onConflict });
+    const { error } = await this.db.from(table).upsert(clean(rows) as never, { onConflict });
+    if (error) throw new Error(`${table}: ${error.message}`);
+  }
+
+  async remove(table: TableName, match: Record<string, string | number>) {
+    const { error } = await this.db.from(table).delete().match(match);
     if (error) throw new Error(`${table}: ${error.message}`);
   }
 

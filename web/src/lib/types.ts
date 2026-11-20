@@ -238,6 +238,26 @@ export interface StudentListItem extends Student {
   days_left: number | null;
 }
 
+export interface StudentDocument {
+  id: string;
+  student_id: string;
+  kind: string; // resume | photo | id_proof | certificate | other
+  storage_path: string; // <student_id>/<kind>/<timestamp>-<file name>
+  verified: boolean;
+  uploaded_at?: string;
+}
+
+export const DOC_KINDS: Record<string, string> = {
+  resume: "Resume",
+  photo: "Photo",
+  id_proof: "ID proof",
+  certificate: "Certificate",
+  other: "Other",
+};
+
+/** Original file name, recovered from the storage path. */
+export const docFileName = (path: string) => path.split("/").pop()?.replace(/^\d+-/, "") ?? path;
+
 export interface StudentProfile {
   student: Student;
   course?: Course;
@@ -250,6 +270,7 @@ export interface StudentProfile {
   payments: Payment[];
   responses: (DriveResponse & { drive: Drive })[];
   letters: Letter[];
+  documents: StudentDocument[];
   attendance: { pct: number; bySource: Record<AttendanceSource, number>; recent: AttendanceRecord[] };
   fee: { total: number; paid: number; balance: number; next_due: string | null };
 }

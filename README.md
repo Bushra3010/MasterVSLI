@@ -20,7 +20,10 @@ workers/cron/     Cloudflare Worker that triggers the daily validity/expiry job
 | Access control | `/access` | One hold/activate switch flips Zoom, TeamViewer, biometric, placements and portal; per-channel overrides; audit trail |
 | Placements | `/placements`, `/portal/drives` | Admin creates a drive → students answer Yes/No → "Yes" rows auto-append to a Google Sheet tab for that drive |
 | Letters & certificates | `/documents`, `/verify/[serial]` | 11 templates (student + staff), unique serial numbers, QR code linking to a public verification page |
-| Student portal | `/portal` | Own profile, attendance, fees, drives, documents |
+| Student portal | `/portal` | Own profile, notices, attendance, fees, drives, letters, document uploads, password change |
+| Student documents | profile → Documents, `/portal/documents` | Upload resume / photo / ID proof / certificates (PDF, image, Word, ≤ 5 MB) to private Supabase Storage; staff verify; files open only for staff or their owner |
+| Settings | `/settings` | Courses, batches, vendors & sub-vendors, staff (needed for staff letters) |
+| Mobile app | `/manifest.webmanifest` | Installable from the phone browser ("Add to Home screen") |
 
 ## Run locally
 
@@ -74,8 +77,20 @@ npx wrangler secret put CRON_SECRET
 npm run deploy      # runs daily at 06:00 IST
 ```
 
-## Not done yet
+## Expiry reminder emails
 
-- Sending the reminder messages themselves (email/SMS/WhatsApp). The expiry job records each notification; a delivery provider plugs in at `web/src/app/api/cron/expiry/route.ts`.
-- Uploading student documents to Supabase Storage (the `student-docs` bucket and table exist; there's no upload UI yet).
-- A mobile app (the portal works on phones).
+The daily job records each 30/15/7/1-day reminder and each expiry, shows them to admins (Validity page) and to the student (portal notices), and emails them through [Resend](https://resend.com) when `RESEND_API_KEY` and `NOTIFY_FROM` are set (`wrangler secret put` each). Unsent reminders are retried on every run.
+
+## Student portal logins
+
+On a student's profile, **Create portal login** makes a Supabase login for the student's email and shows a one-time temporary password to hand over. The student changes it under **Account**.
+
+## Tests
+
+`web/scripts/e2e.py` drives every module through real form posts against a local demo-mode server (59 checks):
+
+```bash
+cd web
+NEXT_PUBLIC_SUPABASE_URL= NEXT_PUBLIC_SUPABASE_ANON_KEY= CRON_SECRET=e2e-secret npx next dev -p 3100
+python3 scripts/e2e.py http://localhost:3100
+```

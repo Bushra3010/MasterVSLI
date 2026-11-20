@@ -34,3 +34,15 @@ export function fmtDate(iso?: string | null) {
 }
 
 export const titleCase = (s: string) => s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+/** HH:MM in India time for an ISO timestamp. */
+export function istTime(iso?: string | null) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" });
+}
+
+/** "YYYY-MM-DD HH:MM" in India time, for exports. */
+export function istDateTime(iso?: string | null) {
+  if (!iso) return "";
+  return `${istDate(iso)} ${istTime(iso)}`;
+}

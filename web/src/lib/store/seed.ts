@@ -36,7 +36,7 @@ export interface DemoTables {
   vendors: Vendor[];
   students: Student[];
   student_education: Education[];
-  student_documents: { id: string; student_id: string; kind: string; storage_path: string; verified: boolean }[];
+  student_documents: { id: string; student_id: string; kind: string; storage_path: string; verified: boolean; uploaded_at?: string }[];
   student_access: AccessRow[];
   access_events: { id: number; student_id: string; action: string; reason?: string | null; created_at: string }[];
   attendance_records: AttendanceRecord[];
@@ -270,7 +270,7 @@ export function buildSeed(): DemoTables {
         };
         installments.push(inst);
         if (paidAmount > 0)
-          payments.push({ id: `p-${inst.id}`, installment_id: inst.id, student_id: id, amount: paidAmount, mode: pick(["UPI", "Bank Transfer", "Card", "Cash"]), reference: `TXN${100000 + auto * 7}`, paid_at: due + "T10:00:00Z" });
+          payments.push({ id: `p-${inst.id}`, installment_id: inst.id, student_id: id, amount: paidAmount, mode: pick(["UPI", "Bank Transfer", "Card", "Cash"]), reference: `TXN${100000 + auto * 7}`, paid_at: (due < today ? due : addDays(today, -1)) + "T04:00:00Z" });
         instIndex++;
       }
     }

@@ -18,7 +18,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { Badge, Card, Field, Progress, StatusBadge } from "@/components/ui";
 import { fmtDate, inr, titleCase } from "@/lib/format";
-import type { Channel, StudentProfile } from "@/lib/types";
+import { DOC_KINDS, docFileName, type Channel, type StudentDocument, type StudentProfile } from "@/lib/types";
 
 const channelMeta: Record<Channel, { label: string; icon: ReactNode }> = {
   zoom: { label: "Zoom (live class)", icon: <Video size={15} /> },
@@ -36,11 +36,16 @@ export function StudentProfileView({
   p,
   channelControl,
   paymentControl,
+  documentControl,
+  uploadSlot,
 }: {
   p: StudentProfile;
   channelControl?: (channel: Channel, enabled: boolean) => ReactNode;
   paymentControl?: (installmentId: string, balance: number) => ReactNode;
+  documentControl?: (doc: StudentDocument) => ReactNode;
+  uploadSlot?: ReactNode;
 }) {
+  const resume = p.documents.find((d) => d.kind === "resume");
   const s = p.student;
   const pr = s.professional ?? {};
   const yesNo = (v?: boolean) => (v ? "Yes" : "No");
@@ -67,7 +72,7 @@ export function StudentProfileView({
           <Field label="Email" value={s.email} />
           <Field label="Alternate email" value={s.alt_email} />
           <Field label="LinkedIn" value={s.linkedin} />
-          <Field label="Resume" value={s.resume_url ? <a href={s.resume_url} className="text-navy underline">View resume</a> : null} />
+          <Field label="Resume" value={resume ? <a href={`/api/documents/${resume.id}`} target="_blank" className="text-navy underline">View resume</a> : s.resume_url ? <a href={s.resume_url} target="_blank" className="text-navy underline">View resume</a> : null} />
         </dl>
       </Card>
 
@@ -247,6 +252,25 @@ export function StudentProfileView({
           ))}
           {!p.letters.length && <li className="text-muted">None issued yet</li>}
         </ul>
+      </Card>
+
+      <Card title="Documents" icon={<FileText size={15} />}>
+        <ul className="space-y-2 text-sm">
+          {p.documents.map((d) => (
+            <li key={d.id} className="flex items-center justify-between gap-2">
+              <span className="min-w-0">
+                <a href={`/api/documents/${d.id}`} target="_blank" className="font-medium text-navy hover:text-brand">{DOC_KINDS[d.kind] ?? d.kind}</a>
+                <span className="block truncate text-xs text-muted">{docFileName(d.storage_path)}</span>
+              </span>
+              <span className="flex shrink-0 items-center gap-1.5">
+                <Badge tone={d.verified ? "green" : "amber"}>{d.verified ? "Verified" : "Pending"}</Badge>
+                {documentControl?.(d)}
+              </span>
+            </li>
+          ))}
+          {!p.documents.length && <li className="text-muted">No documents uploaded</li>}
+        </ul>
+        {uploadSlot}
       </Card>
 
       <Card title="Access history" icon={<History size={15} />}>

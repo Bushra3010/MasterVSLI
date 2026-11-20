@@ -76,6 +76,11 @@ export class DemoStore implements Store {
     for (const r of this.table(t)) if (matches(r, { eq: match })) Object.assign(r, patch);
   }
 
+  async remove(t: TableName, match: Record<string, string | number>) {
+    const rows = this.table(t);
+    for (let i = rows.length - 1; i >= 0; i--) if (matches(rows[i], { eq: match })) rows.splice(i, 1);
+  }
+
   async upsert<T>(t: TableName, rows: Partial<T>[], onConflict: string) {
     const keys = onConflict.split(",").map((k) => k.trim());
     for (const input of rows as Row[]) {

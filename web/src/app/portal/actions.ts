@@ -21,3 +21,26 @@ export async function respondAction(driveId: string, response: DriveResponseValu
   if (response === "yes") await syncDriveToSheet(getServiceRepo(), driveId).catch(() => null);
   revalidatePath("/portal", "layout");
 }
+
+export async function changePasswordAction(_: unknown, form: FormData): Promise<{ ok: boolean; message: string }> {
+  await requireStudent();
+  const password = String(form.get("password") ?? "");
+  const confirm = String(form.get("confirm") ?? "");
+  if (password.length < 8) return { ok: false, message: "Use at least 8 characters." };
+  if (password !== confirm) return { ok: false, message: "The two passwords don't match." };
+  const { isSupabaseConfigured, supabaseServer } = await import("@/lib/supabase/clients");
+  if (!isSupabaseConfigured()) return { ok: false, message: "Demo mode has no passwords." };
+  const { error } = await (await supabaseServer()).auth.updateUser({ password });
+  return error ? { ok: false, message: error.message } : { ok: true, message: "Password updated. Use it next time you sign in." };
+}
+
+/** Students may add their own resume, photo, certificates or ID proof; staff verify them. */
+export async function portalUploadAction(_: unknown, form: FormData) {
+  const s = await requireStudent();
+  const { uploadStudentDocument } = await import("@/lib/documents");
+  const { getStudentReadRepo } = await import("@/lib/server");
+  // Writes go through the service role because students have read-only access to their document rows.
+  const res = await uploadStudentDocument(await getStudentReadRepo(), s.studentId, form);
+  if (res.ok) revalidatePath("/portal", "layout");
+  return res;
+}

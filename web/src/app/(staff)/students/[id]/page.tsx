@@ -3,7 +3,9 @@ import { StudentProfileView } from "@/components/student-profile";
 import { Badge, StatusBadge } from "@/components/ui";
 import { daysBetween, fmtDate, todayISO } from "@/lib/format";
 import { getRepo } from "@/lib/server";
-import { recordPaymentAction, renewAction, setStatusAction, toggleChannelAction } from "../../actions";
+import { UploadForm } from "@/components/documents-card";
+import { PortalLoginButton } from "./portal-login";
+import { deleteDocumentAction, uploadDocumentAction, verifyDocumentAction, recordPaymentAction, renewAction, setStatusAction, toggleChannelAction } from "../../actions";
 
 export default async function StudentPage({ params }: PageProps<"/students/[id]">) {
   const { id } = await params;
@@ -45,6 +47,8 @@ export default async function StudentPage({ params }: PageProps<"/students/[id]"
           <form action={renewAction.bind(null, s.id, 6)}>
             <button className="btn-ghost">Renew +6 months</button>
           </form>
+          <a href={`/students/${s.id}/edit`} className="btn-ghost">Edit profile</a>
+          <PortalLoginButton studentId={s.id} hasLogin={Boolean(s.user_id)} />
           <a href={`/documents?subject=student:${s.id}`} className="btn-navy">Issue letter</a>
         </div>
       </div>
@@ -55,6 +59,17 @@ export default async function StudentPage({ params }: PageProps<"/students/[id]"
           <form action={toggleChannelAction.bind(null, s.id, channel, !enabled)}>
             <button className="text-xs text-muted underline hover:text-brand">{enabled ? "Block" : "Allow"}</button>
           </form>
+        )}
+        uploadSlot={<UploadForm action={uploadDocumentAction.bind(null, s.id)} />}
+        documentControl={(d) => (
+          <>
+            <form action={verifyDocumentAction.bind(null, d.id, !d.verified)}>
+              <button className="text-[11px] text-muted underline hover:text-brand">{d.verified ? "Unverify" : "Verify"}</button>
+            </form>
+            <form action={deleteDocumentAction.bind(null, d.id)}>
+              <button className="text-[11px] text-muted underline hover:text-brand" title="Delete this file">Delete</button>
+            </form>
+          </>
         )}
         paymentControl={(installmentId, balance) => (
           <form action={recordPaymentAction} className="inline">

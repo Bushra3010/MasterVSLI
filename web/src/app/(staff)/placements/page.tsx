@@ -4,7 +4,7 @@ import { Badge, Card, PageHeader, Stat, StatusBadge } from "@/components/ui";
 import { fmtDate } from "@/lib/format";
 import { SHEET_COLUMNS } from "@/lib/integrations/google-sheets";
 import { getRepo } from "@/lib/server";
-import { createDriveAction, setDriveStatusAction, setStageAction } from "../actions";
+import { createDriveAction, recordResponseAction, setDriveStatusAction, setStageAction } from "../actions";
 import { SyncButton } from "./sync-button";
 
 export const metadata = { title: "Placements" };
@@ -112,6 +112,19 @@ export default async function PlacementsPage({ searchParams }: PageProps<"/place
                   {!rs.length && <tr><td colSpan={4} className="text-center text-muted">No responses yet</td></tr>}
                 </tbody>
               </table>
+              <form action={recordResponseAction.bind(null, selected.id)} className="flex flex-wrap items-center gap-2 border-t border-line bg-slate-50 p-3">
+                <span className="text-xs font-medium text-muted">Record a response on a student&apos;s behalf:</span>
+                <select name="student_id" required aria-label="Student" className="input w-auto py-1.5" defaultValue="">
+                  <option value="" disabled>Select student…</option>
+                  {eligible.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.full_name} ({s.enrollment_no}){responded.has(s.id) ? " — already answered" : ""}
+                    </option>
+                  ))}
+                </select>
+                <button name="response" value="yes" className="btn py-1.5 text-xs border border-emerald-300 bg-emerald-50 text-emerald-800">Yes, interested</button>
+                <button name="response" value="no" className="btn py-1.5 text-xs border border-red-200 bg-red-50 text-brand">No</button>
+              </form>
             </Card>
           )}
         </div>

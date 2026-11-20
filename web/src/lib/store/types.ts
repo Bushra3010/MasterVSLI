@@ -38,5 +38,6 @@ export interface Store {
   insert<T>(table: TableName, rows: Partial<T>[]): Promise<T[]>;
   update<T>(table: TableName, match: Record<string, string | number>, patch: Partial<T>): Promise<void>;
   upsert<T>(table: TableName, rows: Partial<T>[], onConflict: string): Promise<void>;
+  remove(table: TableName, match: Record<string, string | number>): Promise<void>;
   rpc<T>(fn: "set_student_status" | "process_expiry", args: Record<string, unknown>): Promise<T>;
 }

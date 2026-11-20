@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { safeEqual } from "@/lib/integrations/crypto";
+import { deliverPendingNotifications } from "@/lib/notify";
 import { getServiceRepo } from "@/lib/server";
 
 /**
@@ -11,9 +12,10 @@ async function run(req: Request) {
   const secret = process.env.CRON_SECRET;
   const auth = req.headers.get("authorization") ?? "";
   if (!secret || !safeEqual(auth, `Bearer ${secret}`)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const processed = await getServiceRepo().processExpiry();
-  // Hook point: deliver notifications (email/SMS/WhatsApp) for `processed` here.
-  return NextResponse.json({ ok: true, processed });
+  const repo = getServiceRepo();
+  const processed = await repo.processExpiry();
+  const delivery = await deliverPendingNotifications(repo);
+  return NextResponse.json({ ok: true, processed, delivery });
 }
 
 export const GET = run;

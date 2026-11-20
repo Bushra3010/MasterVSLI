@@ -1,6 +1,8 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "mastervlsi-erp",
+  // Pinned so a different Cloudflare login on this machine can never receive this deploy.
+  "account_id": "843f60cf5c636f182e60e530d26209f6",
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-11-01",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],

@@ -29,6 +29,7 @@ import type {
   StudentListItem,
   StudentProfile,
   StudentStatus,
+  StudentDocument,
   Vendor,
 } from "./types";
 
@@ -121,7 +122,7 @@ export function createRepo(db: Store) {
     async profile(id: string): Promise<StudentProfile | null> {
       const [student] = await db.select<Student>("students", { eq: { id } });
       if (!student) return null;
-      const [courses, batches, vendors, education, access, events, allocations, installments, payments, responses, drives, letters, att, allAtt] =
+      const [courses, batches, vendors, education, access, events, allocations, installments, payments, responses, drives, letters, documents, att, allAtt] =
         await Promise.all([
           repo.courses(),
           repo.batches(),
@@ -135,6 +136,7 @@ export function createRepo(db: Store) {
           db.select<DriveResponse>("drive_responses", { eq: { student_id: id } }),
           db.select<Drive>("placement_drives"),
           db.select<Letter>("issued_letters", { eq: { student_id: id } }),
+          db.select<StudentDocument>("student_documents", { eq: { student_id: id }, order: { column: "uploaded_at", ascending: false } }),
           db.select<AttendanceRecord>("attendance_records", { eq: { student_id: id }, order: { column: "session_date", ascending: false } }),
           recentAttendance(),
         ]);
@@ -155,6 +157,7 @@ export function createRepo(db: Store) {
           .map((r) => ({ ...r, drive: drives.find((d) => d.id === r.drive_id)! }))
           .filter((r) => r.drive),
         letters,
+        documents,
         attendance: { pct: attendancePct(allAtt)(id), bySource, recent: att.slice(0, 15) },
         fee: {
           total: Number(student.total_fee),
@@ -290,7 +293,7 @@ export function createRepo(db: Store) {
     async recordPayment(installment_id: string, amount: number, mode: string, reference?: string) {
       const [inst] = await db.select<Installment>("installments", { eq: { id: installment_id } });
       if (!inst) throw new Error("Installment not found");
-      await db.insert<Payment>("payments", [{ installment_id, student_id: inst.student_id, amount, mode, reference: reference || null }]);
+      await db.insert<Payment>("payments", [{ installment_id, student_id: inst.student_id, amount, mode, reference: reference || null, paid_at: new Date().toISOString() }]);
     },
 
     drives: () => db.select<Drive>("placement_drives", { order: { column: "drive_date" } }),
@@ -300,12 +303,23 @@ export function createRepo(db: Store) {
     },
     setDriveStatus: (id: string, status: DriveStatus) => db.update<Drive>("placement_drives", { id }, { status }),
     responses: (driveId?: string) => db.select<DriveResponse>("drive_responses", driveId ? { eq: { drive_id: driveId } } : {}),
-    respond: (drive_id: string, student_id: string, response: DriveResponseValue) =>
-      db.upsert<DriveResponse>(
+    async respond(drive_id: string, student_id: string, response: DriveResponseValue) {
+      const [prev] = await db.select<DriveResponse>("drive_responses", { eq: { drive_id, student_id } });
+      await db.upsert<DriveResponse>(
         "drive_responses",
-        [{ drive_id, student_id, response, stage: response === "yes" ? "Applied" : null, synced_to_sheet: false, updated_at: new Date().toISOString() }],
+        [{
+          drive_id,
+          student_id,
+          response,
+          // keep an existing stage when re-confirming "yes"; a fresh "yes" starts at Applied
+          stage: response === "yes" ? (prev?.response === "yes" ? prev.stage ?? "Applied" : "Applied") : null,
+          // a changed answer must be re-exported to the sheet
+          synced_to_sheet: prev?.response === response ? prev.synced_to_sheet : false,
+          updated_at: new Date().toISOString(),
+        }],
         "drive_id,student_id",
-      ),
+      );
+    },
     async markSynced(drive_id: string, studentIds: string[]) {
       const now = new Date().toISOString();
       for (const student_id of studentIds)
@@ -329,6 +343,54 @@ export function createRepo(db: Store) {
       return l;
     },
 
+    // ---- profile editing --------------------------------------------------
+    async updateStudent(id: string, patch: Partial<Student>) {
+      await db.update<Student>("students", { id }, { ...patch, updated_at: new Date().toISOString() } as Partial<Student>);
+    },
+    async replaceEducation(student_id: string, rows: Omit<Education, "id" | "student_id">[]) {
+      await db.remove("student_education", { student_id });
+      const keep = rows.filter((r) => r.institution || r.board || r.stream || r.year_of_passing || r.score);
+      if (keep.length) await db.insert<Education>("student_education", keep.map((r) => ({ ...r, student_id })));
+    },
+    async setExternalRefs(student_id: string, refs: Partial<Record<Channel, string | null>>) {
+      for (const [channel, ref] of Object.entries(refs))
+        await db.update<AccessRow>("student_access", { student_id, channel }, { external_ref: ref || null });
+    },
+
+    // ---- documents ----------------------------------------------------------
+    async document(id: string) {
+      return (await db.select<StudentDocument>("student_documents", { eq: { id } }))[0] ?? null;
+    },
+    async addDocument(student_id: string, kind: string, storage_path: string) {
+      const [d] = await db.insert<StudentDocument>("student_documents", [
+        { student_id, kind, storage_path, verified: false, uploaded_at: new Date().toISOString() },
+      ]);
+      return d;
+    },
+    setDocumentVerified: (id: string, verified: boolean) => db.update<StudentDocument>("student_documents", { id }, { verified }),
+    removeDocument: (id: string) => db.remove("student_documents", { id }),
+
+    // ---- master data (settings) -------------------------------------------
+    async saveCourse(c: Partial<Course> & { id?: string }) {
+      if (c.id) await db.update<Course>("courses", { id: c.id }, c);
+      else await db.insert<Course>("courses", [c]);
+    },
+    async saveBatch(b: Partial<Batch> & { id?: string }) {
+      if (b.id) await db.update<Batch>("batches", { id: b.id }, b);
+      else await db.insert<Batch>("batches", [b]);
+    },
+    async saveVendor(v: Partial<Vendor> & { id?: string }) {
+      if (v.id) await db.update<Vendor>("vendors", { id: v.id }, v);
+      else await db.insert<Vendor>("vendors", [v]);
+    },
+    async saveStaff(s: Partial<Staff> & { id?: string }) {
+      if (s.id) await db.update<Staff>("staff", { id: s.id }, s);
+      else await db.insert<Staff>("staff", [s]);
+    },
+
+    markNotificationSent: (id: number) => db.update<NotificationRow>("notifications", { id }, { sent_at: new Date().toISOString() }),
+    studentNotifications: (student_id: string) =>
+      db.select<NotificationRow>("notifications", { eq: { student_id }, order: { column: "created_at", ascending: false } }),
     notifications: () => db.select<NotificationRow>("notifications", { order: { column: "created_at", ascending: false }, limit: 50 }),
     processExpiry: () => db.rpc<{ student_id: string; kind: string }[]>("process_expiry", {}),
   };

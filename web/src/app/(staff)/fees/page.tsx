@@ -73,7 +73,7 @@ export default async function FeesPage({ searchParams }: PageProps<"/fees">) {
               {subs.map(({ s, total, paid, count }) => (
                 <div key={s.id} className="rounded-lg border border-line p-3">
                   <div className="text-sm font-medium">{s.name}</div>
-                  <div className="text-xs text-muted">{s.contact_person} · {s.phone}</div>
+                  <div className="text-xs text-muted">{[s.contact_person, s.phone].filter(Boolean).join(" · ") || "No contact details"}</div>
                   <div className="mt-1 text-sm tabular-nums">{inr(paid)} <span className="text-muted">/ {inr(total)}</span></div>
                   <div className="text-[11px] text-muted">{count} installments</div>
                 </div>
@@ -118,6 +118,7 @@ export default async function FeesPage({ searchParams }: PageProps<"/fees">) {
                         <select name="mode" className="input w-auto py-1">
                           <option>UPI</option><option>Bank Transfer</option><option>Card</option><option>Cash</option>
                         </select>
+                        <input name="reference" placeholder="Txn ref" aria-label="Transaction reference" className="input w-28 py-1" />
                         <button className="btn-primary py-1">Save</button>
                       </form>
                     )}

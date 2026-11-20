@@ -1,15 +1,17 @@
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Bell } from "lucide-react";
+import { noticeText } from "@/lib/notify";
 import { StudentProfileView } from "@/components/student-profile";
-import { Badge, StatusBadge } from "@/components/ui";
+import { Badge, Card, StatusBadge } from "@/components/ui";
 import { daysBetween, fmtDate, todayISO } from "@/lib/format";
-import { getRepo } from "@/lib/server";
+import { getStudentReadRepo } from "@/lib/server";
 import { requireStudent } from "@/lib/session";
 
 export const metadata = { title: "My dashboard" };
 
 export default async function PortalHome() {
   const s = await requireStudent();
-  const p = await (await getRepo()).profile(s.studentId);
+  const repo = await getStudentReadRepo();
+  const [p, notices] = await Promise.all([repo.profile(s.studentId), repo.studentNotifications(s.studentId)]);
   if (!p) return <p>Profile not found.</p>;
   const st = p.student;
   const left = st.validity_end ? daysBetween(todayISO(), st.validity_end) : null;
@@ -35,6 +37,18 @@ export default async function PortalHome() {
         <div className="mb-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
           Your training access expires in <b>{left} days</b>. Contact the office to renew.
         </div>
+      )}
+      {notices.length > 0 && (
+        <Card title="Notices" icon={<Bell size={15} />} className="mb-5">
+          <ul className="space-y-2 text-sm">
+            {notices.slice(0, 5).map((n) => (
+              <li key={n.id} className="flex justify-between gap-3">
+                <span>{noticeText(n.kind, st.full_name, st.validity_end).subject}</span>
+                <span className="shrink-0 text-xs text-muted">{fmtDate(n.created_at)}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
       )}
       <StudentProfileView p={p} />
     </>

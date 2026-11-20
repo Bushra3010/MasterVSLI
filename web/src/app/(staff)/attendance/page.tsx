@@ -1,7 +1,7 @@
 import { AlertTriangle, Download, Fingerprint, MonitorPlay, Video } from "lucide-react";
 import Link from "next/link";
 import { Badge, Card, PageHeader, Progress, Stat } from "@/components/ui";
-import { addDays, fmtDate, todayISO } from "@/lib/format";
+import { addDays, fmtDate, istTime, todayISO } from "@/lib/format";
 import { IRREGULAR_THRESHOLD } from "@/lib/repo";
 import { getRepo } from "@/lib/server";
 import type { AttendanceSource } from "@/lib/types";
@@ -25,6 +25,15 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
   const irregular = students.filter((s) => s.status === "active" && s.attendance_pct < IRREGULAR_THRESHOLD).sort((a, b) => a.attendance_pct - b.attendance_pct);
   const totalMinutes = records.reduce((a, r) => a + r.duration_minutes, 0);
   const qs = `from=${from}&to=${to}`;
+  const today = todayISO();
+  const monthStart = today.slice(0, 8) + "01";
+  const lastMonthEnd = addDays(monthStart, -1);
+  const presets = [
+    { label: "Today", from: today, to: today },
+    { label: "Last 7 days", from: addDays(today, -6), to: today },
+    { label: "This month", from: monthStart, to: today },
+    { label: "Last month", from: lastMonthEnd.slice(0, 8) + "01", to: lastMonthEnd },
+  ];
 
   return (
     <>
@@ -42,6 +51,17 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
         <div><label className="label">From</label><input type="date" name="from" defaultValue={from} className="input" /></div>
         <div><label className="label">To</label><input type="date" name="to" defaultValue={to} className="input" /></div>
         <button className="btn-ghost">Apply</button>
+        <div className="flex flex-wrap gap-1 text-xs">
+          {presets.map((r) => (
+            <Link
+              key={r.label}
+              href={`/attendance?from=${r.from}&to=${r.to}`}
+              className={`rounded-full border px-3 py-1.5 ${r.from === from && r.to === to ? "border-navy bg-navy text-white" : "border-line bg-white hover:border-navy"}`}
+            >
+              {r.label}
+            </Link>
+          ))}
+        </div>
       </form>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -88,15 +108,15 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
 
         <Card title="Latest synced records" className="xl:col-span-3" bodyClass="p-0 overflow-x-auto">
           <table className="table">
-            <thead><tr><th>Student</th><th>Source</th><th>Date</th><th>In</th><th>Out</th><th>Duration</th><th>Ref</th></tr></thead>
+            <thead><tr><th>Student</th><th>Source</th><th>Date</th><th>In (IST)</th><th>Out (IST)</th><th>Duration</th><th>Ref</th></tr></thead>
             <tbody>
               {records.slice(0, 40).map((r) => (
                 <tr key={r.id}>
                   <td>{name.get(r.student_id)?.full_name ?? r.student_id}</td>
                   <td><Badge tone={r.source === "zoom" ? "blue" : r.source === "teamviewer" ? "violet" : "slate"}>{r.source}</Badge></td>
                   <td>{fmtDate(r.session_date)}</td>
-                  <td className="tabular-nums">{r.check_in?.slice(11, 16) ?? "—"}</td>
-                  <td className="tabular-nums">{r.check_out?.slice(11, 16) ?? "—"}</td>
+                  <td className="tabular-nums">{istTime(r.check_in)}</td>
+                  <td className="tabular-nums">{istTime(r.check_out)}</td>
                   <td className="tabular-nums">{r.duration_minutes} min</td>
                   <td className="font-mono text-xs text-muted">{r.external_ref}</td>
                 </tr>
