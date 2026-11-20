@@ -329,6 +329,104 @@ check("portal: student uploads a certificate", "cert.png" in html and "Awaiting 
 _, _, html = get("/manifest.webmanifest", "")
 check("installable app manifest served", '"display":"standalone"' in html.replace(" ", ""))
 
+# 13. every letter template (7 student + 4 staff)
+TEMPLATES = ["admission_confirmation", "student_id_card", "visiting_card", "internship_offer", "internship_completion",
+             "training_certificate", "placement_confirmation", "staff_offer", "payslip", "service_agreement", "experience_letter"]
+for tpl in TEMPLATES:
+    _, _, html = get(f"/documents?template={tpl}", ADMIN)
+    f = find_form(html, must=["template", "subject"])
+    opts = f["selects"]["subject"]["options"]
+    subject = next(o for o in opts if o.startswith("staff:")) if tpl in ("staff_offer", "payslip", "service_agreement", "experience_letter") else f"student:{new_id}"
+    vals = {"subject": subject}
+    for name, _, typ in f["fields"]:
+        if name and name.startswith("d_"):
+            vals[name] = {"date": "2026-12-01", "month": "2026-11", "number": "1000"}.get(typ, "Sample value")
+    s, loc, _ = submit("/documents", ADMIN, f, vals)
+    ok = "/documents/MV-" in loc
+    if ok:
+        st, _, html = get(loc, ADMIN)
+        ok = st == 200 and ("E2E Student" in html or "E2E Staff" in html)
+    check(f"letter template {tpl}", ok, f"loc {loc}")
+
+# 14. Zoom + TeamViewer feeds for the new student
+import hashlib, hmac, time
+enroll = re.search(r"MVL\d+", text(get(SP, ADMIN)[2]))[0]
+ZSEC = ENV.get("ZOOM_WEBHOOK_SECRET", "").split("#")[0].strip()
+def zoom(event, email, uuid_):
+    now = dt.datetime.utcnow()
+    body = json.dumps({"event": event, "payload": {"object": {"uuid": uuid_, "participant": {"email": email,
+           "join_time": (now - dt.timedelta(minutes=95)).strftime("%Y-%m-%dT%H:%M:%SZ"), "leave_time": now.strftime("%Y-%m-%dT%H:%M:%SZ")}}}}).encode()
+    ts = str(int(time.time()))
+    sig = "v0=" + hmac.new(ZSEC.encode(), f"v0:{ts}:".encode() + body, hashlib.sha256).hexdigest()
+    return http("POST", "/api/webhooks/zoom", "", body, {"content-type": "application/json", "x-zm-request-timestamp": ts, "x-zm-signature": sig})
+s, _, raw = http("POST", "/api/webhooks/zoom", "", json.dumps({"event": "endpoint.url_validation", "payload": {"plainToken": "tok"}}).encode(), {"content-type": "application/json"})
+check("zoom URL validation token correct", json.loads(raw).get("encryptedToken") == hmac.new(ZSEC.encode(), b"tok", hashlib.sha256).hexdigest())
+s1, _, r1 = zoom("meeting.participant_joined", "e2e.student@example.com", "e2e-meet")
+s2, _, r2 = zoom("meeting.participant_left", "e2e.student@example.com", "e2e-meet")
+check("zoom join+leave recorded", s1 == 200 and s2 == 200 and b'"ok":true' in r2, (r1 + r2)[:200])
+s, _, raw = http("POST", "/api/webhooks/zoom", "", b'{"event":"meeting.participant_joined","payload":{}}', {"content-type": "application/json", "x-zm-request-timestamp": str(int(time.time())), "x-zm-signature": "v0=bad"})
+check("zoom forged signature rejected", s == 401)
+TV = {"content-type": "application/json", "x-api-key": ENV.get("TEAMVIEWER_API_KEY", "").split("#")[0].strip()}
+s, _, raw = http("POST", "/api/webhooks/teamviewer", "", json.dumps({"student_ref": enroll, "recording_id": "rec-e2e", "watched_minutes": 42}).encode(), TV)
+check("teamviewer recording recorded", s == 200 and b'"ok":true' in raw, raw[:200])
+s, _, raw = http("POST", "/api/webhooks/teamviewer", "", b'{"student_ref":"x","recording_id":"r","watched_minutes":1}', {"content-type": "application/json", "x-api-key": "wrong"})
+check("teamviewer wrong key rejected", s == 401)
+_, _, csv = get(f"/api/export/attendance?from={TODAY - dt.timedelta(days=1)}&to={TODAY}", ADMIN)
+rows = [l for l in csv.splitlines() if "E2E Student" in l]
+check("CSV export: IST headers and all 3 sources for new student",
+      "Check-in (IST)" in csv and {"zoom", "teamviewer", "biometric"} <= {src for l in rows for src in ("zoom", "teamviewer", "biometric") if f'"{src}"' in l}, f"{len(rows)} rows")
+_, _, prof = get(SP, ADMIN)
+check("profile attendance counts all 3 sources", re.search(r"Zoom [1-9]", text(prof)) and re.search(r"TeamViewer [1-9]", text(prof)) and re.search(r"Biometric [1-9]", text(prof)))
+
+# 15. block a single channel
+submit(SP, ADMIN, find_form(prof, button="Block"), button="Block")  # first channel listed = Zoom
+s, _, raw = zoom("meeting.participant_joined", "e2e.student@example.com", "e2e-meet-2")
+check("blocked Zoom: join refused", s == 403, raw[:200])
+s, _, raw = http("POST", "/api/webhooks/teamviewer", "", json.dumps({"student_ref": enroll, "recording_id": "rec-e2e-2", "watched_minutes": 10}).encode(), TV)
+check("blocked Zoom: recordings still allowed", s == 200, raw[:200])
+_, _, prof = get(SP, ADMIN)
+submit(SP, ADMIN, find_form(prof, button="Allow"), button="Allow")
+s, _, _ = zoom("meeting.participant_joined", "e2e.student@example.com", "e2e-meet-3")
+check("Zoom allowed again", s == 200)
+
+# 16. expiry: past end date -> auto-expired, everything blocked, portal blocked; renewal restores
+_, _, html = get(SP + "/edit", ADMIN)
+f = find_form(html, must=["full_name", "edu.0.institution"])
+submit(SP + "/edit", ADMIN, f, {"validity_end": (TODAY - dt.timedelta(days=1)).isoformat()})
+s, _, raw = http("POST", "/api/cron/expiry", "", headers={"authorization": "Bearer e2e-secret"})
+check("cron expires student past end date", any(p["student_id"] == new_id and p["kind"] == "expired" for p in json.loads(raw)["processed"]), raw[:300])
+_, _, prof = get(SP, ADMIN)
+t = text(prof)
+check("expired: status Expired and all 5 channels blocked", "Expired" in t and t.count("Blocked") >= 5)
+s, _, raw = http("POST", "/api/webhooks/biometric", "", json.dumps({"punches": [{"device_id": "D1", "user_code": "E2E-BIO-1", "timestamp": f"{TODAY}T05:00:00Z"}]}).encode(), BIO)
+check("expired: biometric refused", b'"ok":false' in raw, raw[:200])
+NEW = f"mvl_demo=student:{new_id}"
+_, _, html = get("/portal", NEW)
+check("expired: portal shows paused notice", "paused" in text(html) and "expired" in text(html).lower())
+_, _, html = get("/portal/drives", NEW)
+check("expired: portal placement applications blocked", "blocked" in text(html).lower())
+_, _, html = get("/portal", NEW)
+check("portal notices list the expiry", "has expired" in text(html) or "expires in" in text(html))
+submit(SP, ADMIN, find_form(prof, button="Renew +6 months"), button="Renew +6 months")
+_, _, prof = get(SP, ADMIN)
+t = text(prof)
+check("renewal: active again with a future end date", "Active" in t and "Blocked" not in t and "Valid till" in t)
+
+# 17. drive status: closed drives disappear from the portal
+_, _, html = get(f"/placements?drive={drive}", ADMIN)
+submit(f"/placements?drive={drive}", ADMIN, find_form(html, button="Mark closed"), button="Mark closed")
+_, _, html = get("/portal/drives", NEW)
+check("closed drive hidden from students", "E2E Corp" not in html)
+_, _, html = get(f"/placements?drive={drive}", ADMIN)
+submit(f"/placements?drive={drive}", ADMIN, find_form(html, button="Mark open"), button="Mark open")
+_, _, html = get("/portal/drives", NEW)
+check("re-opened drive visible to students", "E2E Corp" in html)
+
+# 18. portal account page
+_, _, html = get("/portal/account", NEW)
+s, _, body = submit("/portal/account", NEW, find_form(html, must=["password", "confirm"]), {"password": "short", "confirm": "short"})
+check("password change validates length", "at least 8 characters" in body)
+
 passed = sum(1 for r in results if r[1])
 print(f"\n{passed}/{len(results)} checks passed")
 sys.exit(0 if passed == len(results) else 1)
