@@ -8,7 +8,14 @@ import type {
   Drive,
   DriveResponse,
   Education,
+  FinanceEntry,
   Installment,
+  LabSystem,
+  LeaveRequest,
+  MessageRow,
+  PayrollRow,
+  ProfileRow,
+  StaffAttendance,
   Letter,
   Payment,
   Staff,
@@ -48,6 +55,13 @@ export interface DemoTables {
   drive_responses: DriveResponse[];
   staff: Staff[];
   issued_letters: Letter[];
+  lab_systems: LabSystem[];
+  staff_attendance: StaffAttendance[];
+  leave_requests: LeaveRequest[];
+  payroll: PayrollRow[];
+  finance_entries: FinanceEntry[];
+  messages: MessageRow[];
+  profiles: ProfileRow[];
 }
 
 const NAMES: [string, string, string][] = [
@@ -95,10 +109,10 @@ export function buildSeed(): DemoTables {
   let auto = 1;
 
   const courses: Course[] = [
-    { id: "c-dv", code: "DV", name: "ASIC Design Verification (SV + UVM)", duration_months: 6, validity_months: 12, fee: 30000 },
-    { id: "c-pd", code: "PD", name: "Physical Design (RTL to GDSII)", duration_months: 6, validity_months: 12, fee: 35000 },
-    { id: "c-dft", code: "DFT", name: "Design for Testability", duration_months: 5, validity_months: 10, fee: 28000 },
-    { id: "c-al", code: "AL", name: "Analog Layout", duration_months: 4, validity_months: 9, fee: 25000 },
+    { syllabus: "SystemVerilog basics; OOP & randomization; Functional coverage & assertions; UVM components; UVM sequences & RAL; Protocol project (AXI/APB); Interview prep", id: "c-dv", code: "DV", name: "ASIC Design Verification (SV + UVM)", duration_months: 6, validity_months: 12, fee: 30000 },
+    { syllabus: "Unix & Tcl; Synthesis & STA basics; Floorplanning & power planning; Placement & CTS; Routing & signoff (DRC/LVS); Project tape-out; Interview prep", id: "c-pd", code: "PD", name: "Physical Design (RTL to GDSII)", duration_months: 6, validity_months: 12, fee: 35000 },
+    { syllabus: "DFT fundamentals; Scan insertion; ATPG; MBIST & LBIST; JTAG/boundary scan; Project; Interview prep", id: "c-dft", code: "DFT", name: "Design for Testability", duration_months: 5, validity_months: 10, fee: 28000 },
+    { syllabus: "CMOS fundamentals; Layout rules & Virtuoso; Matching & parasitics; DRC/LVS/PEX; Project; Interview prep", id: "c-al", code: "AL", name: "Analog Layout", duration_months: 4, validity_months: 9, fee: 25000 },
   ];
   const batches: Batch[] = [
     { id: "b-dv-jan", course_id: "c-dv", name: "DV-Online-Jan26", mode: "online", start_date: addDays(today, -60) },
@@ -307,6 +321,33 @@ export function buildSeed(): DemoTables {
     { id: "st-3", employee_code: "MVE003", full_name: "Imran Sheikh", designation: "PD Trainer", department: "Training", joining_date: "2024-09-01", monthly_salary: 85000, email: "imran@mastervlsi.example", phone: "9900000003" },
   ];
 
+  const lab_systems: LabSystem[] = [
+    { id: "lab-1", code: "LAB-PC-01", location: "Lab A", specs: "i7 / 32 GB / Cadence + Synopsys", teamviewer_id: "1 234 567 801", status: "assigned", student_id: students[0]?.id ?? null, assigned_at: addDays(today, -20) + "T09:00:00Z", notes: null },
+    { id: "lab-2", code: "LAB-PC-02", location: "Lab A", specs: "i7 / 32 GB / Cadence + Synopsys", teamviewer_id: "1 234 567 802", status: "assigned", student_id: students[1]?.id ?? null, assigned_at: addDays(today, -12) + "T09:00:00Z", notes: null },
+    { id: "lab-3", code: "LAB-PC-03", location: "Lab A", specs: "i5 / 16 GB / Questa", teamviewer_id: "1 234 567 803", status: "available", student_id: null, assigned_at: null, notes: null },
+    { id: "lab-4", code: "LAB-PC-04", location: "Lab B", specs: "i5 / 16 GB / Questa", teamviewer_id: "1 234 567 804", status: "maintenance", student_id: null, assigned_at: null, notes: "Fan replacement" },
+    { id: "lab-5", code: "LAB-SRV-01", location: "Server room", specs: "Xeon / 128 GB / license server", teamviewer_id: "1 234 567 900", status: "available", student_id: null, assigned_at: null, notes: null },
+  ];
+  const staff_attendance: StaffAttendance[] = [];
+  for (let d = 1; d <= 10; d++) {
+    const date = addDays(today, -d);
+    const dow = new Date(date + "T00:00:00Z").getUTCDay();
+    if (dow === 0) continue;
+    for (const st of ["st-1", "st-2", "st-3"]) {
+      const x = r();
+      staff_attendance.push({ id: `sa-${st}-${d}`, staff_id: st, att_date: date, status: x < 0.85 ? "present" : x < 0.93 ? "half_day" : "leave" });
+    }
+  }
+  const leave_requests: LeaveRequest[] = [
+    { id: "lv-1", staff_id: "st-2", from_date: addDays(today, 5), to_date: addDays(today, 6), leave_type: "casual", reason: "Family function", status: "pending", created_at: addDays(today, -1) + "T08:00:00Z" },
+    { id: "lv-2", staff_id: "st-3", from_date: addDays(today, -8), to_date: addDays(today, -8), leave_type: "sick", reason: "Fever", status: "approved", created_at: addDays(today, -9) + "T08:00:00Z" },
+  ];
+  const finance_entries: FinanceEntry[] = [
+    { id: "fe-1", kind: "expense", category: "Rent", amount: 60000, entry_date: addDays(today, -15), vendor_id: null, reference: null, note: "Office & lab rent" },
+    { id: "fe-2", kind: "expense", category: "Software licenses", amount: 45000, entry_date: addDays(today, -12), vendor_id: null, reference: "INV-2219", note: "EDA tool licenses" },
+    { id: "fe-3", kind: "expense", category: "Utilities", amount: 8500, entry_date: addDays(today, -6), vendor_id: null, reference: null, note: "Electricity + internet" },
+    { id: "fe-4", kind: "income", category: "Corporate training", amount: 75000, entry_date: addDays(today, -9), vendor_id: null, reference: "PO-551", note: "Weekend corporate batch" },
+  ];
   const letters: Letter[] = [
     { id: "l-1", serial_no: "MV-ADM-2026-0001", template: "admission_confirmation", student_id: "s-001", data: {}, issued_at: addDays(today, -50) + "T10:00:00Z", revoked: false },
     { id: "l-2", serial_no: "MV-CRT-2026-0001", template: "training_certificate", student_id: "s-022", data: {}, issued_at: addDays(today, -5) + "T10:00:00Z", revoked: false },
@@ -335,5 +376,15 @@ export function buildSeed(): DemoTables {
     drive_responses: responses,
     staff,
     issued_letters: letters,
+    lab_systems,
+    staff_attendance,
+    leave_requests,
+    payroll: [],
+    finance_entries,
+    messages: [],
+    profiles: [
+      { id: "demo-admin", full_name: "Demo Admin", role: "admin", created_at: addDays(today, -200) + "T08:00:00Z" },
+      { id: "demo-staff-1", full_name: "sowmya@mastervlsi.example", role: "staff", created_at: addDays(today, -120) + "T08:00:00Z" },
+    ],
   };
 }

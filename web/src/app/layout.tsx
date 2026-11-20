@@ -1,8 +1,8 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist_Mono, Roboto } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
+const roboto = Roboto({ variable: "--font-roboto", subsets: ["latin"], weight: ["400", "500", "700"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
@@ -12,11 +12,11 @@ export const metadata: Metadata = {
   appleWebApp: { capable: true, title: "MasterVLSI", statusBarStyle: "default" },
 };
 
-export const viewport: Viewport = { themeColor: "#0f2a4a", width: "device-width", initialScale: 1 };
+export const viewport: Viewport = { themeColor: "#3d5ee1", width: "device-width", initialScale: 1 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    <html lang="en" className={`${roboto.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="min-h-full">{children}</body>
     </html>
   );

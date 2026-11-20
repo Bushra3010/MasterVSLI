@@ -56,7 +56,18 @@ function Body({ l, s, c, st }: { l: Letter; s: Student | null; c: Course | null;
   }
 }
 
-export function LetterView({ letter: l, student: s, course: c, staff: st, qr, verifyUrl }: NonNullable<Awaited<ReturnType<typeof loadLetter>>>) {
+type LetterProps = NonNullable<Awaited<ReturnType<typeof loadLetter>>>;
+
+/** Letters keep the institute's own red/navy branding, independent of the app theme. */
+export function LetterView(props: LetterProps) {
+  return (
+    <div className="brand-classic">
+      <LetterBody {...props} />
+    </div>
+  );
+}
+
+function LetterBody({ letter: l, student: s, course: c, staff: st, qr, verifyUrl }: LetterProps) {
   const title = templateMeta(l.template)?.title ?? l.template;
   const name = s?.full_name ?? st?.full_name ?? "—";
   const Footer = (

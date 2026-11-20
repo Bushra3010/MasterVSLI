@@ -3,8 +3,10 @@ import Link from "next/link";
 import { Card, PageHeader, Stat, StatusBadge } from "@/components/ui";
 import { fmtDate } from "@/lib/format";
 import { getRepo } from "@/lib/server";
+import { getSession } from "@/lib/session";
 import { CHANNELS, type Channel } from "@/lib/types";
 import { setStatusAction, toggleChannelAction } from "../actions";
+import { setRoleAction } from "../module-actions";
 
 export const metadata = { title: "Access control" };
 
@@ -14,7 +16,9 @@ export default async function AccessPage({ searchParams }: PageProps<"/access">)
   const sp = await searchParams;
   const show = typeof sp.show === "string" ? sp.show : "all";
   const repo = await getRepo();
-  const [students, access, events] = await Promise.all([repo.students(), repo.accessOverview(), repo.accessEvents()]);
+  const [students, access, events, profiles, me] = await Promise.all([repo.students(), repo.accessOverview(), repo.accessEvents(), repo.profiles(), getSession()]);
+  const linked = new Set(students.map((s) => s.user_id).filter(Boolean));
+  const users = profiles.filter((p) => p.role !== "student" || !linked.has(p.id));
   const acc = new Map(access.map((a) => [`${a.student_id}:${a.channel}`, a.enabled]));
   const name = new Map(students.map((s) => [s.id, s.full_name]));
   const list = students.filter((s) => (show === "blocked" ? s.status !== "active" : true));
@@ -37,7 +41,7 @@ export default async function AccessPage({ searchParams }: PageProps<"/access">)
           actions={
             <div className="flex gap-1 text-xs">
               {["all", "blocked"].map((f) => (
-                <Link key={f} href={`/access?show=${f}`} className={`rounded px-2 py-0.5 capitalize ${show === f ? "bg-white text-navy" : "text-white/80"}`}>{f}</Link>
+                <Link key={f} href={`/access?show=${f}`} className={`rounded px-2 py-0.5 capitalize ${show === f ? "bg-brand text-white" : "text-muted hover:text-brand"}`}>{f}</Link>
               ))}
             </div>
           }
@@ -101,6 +105,37 @@ export default async function AccessPage({ searchParams }: PageProps<"/access">)
           </ul>
         </Card>
       </div>
+
+      <Card title="Users & roles (role-based access)" className="mt-5" bodyClass="p-0 overflow-x-auto">
+        <p className="border-b border-line px-4 py-2 text-xs text-muted">
+          <b>Admin</b>: everything, including changing roles. <b>Staff</b>: all ERP modules. <b>Student</b>: only their own portal. New logins start as Student.
+          {me?.role !== "admin" && " Only admins can change roles."}
+        </p>
+        <table className="table">
+          <thead><tr><th>User</th><th>Since</th><th>Role</th></tr></thead>
+          <tbody>
+            {users.map((u) => (
+              <tr key={u.id}>
+                <td className="font-medium">{u.full_name || u.id.slice(0, 8)}{u.id === me?.userId && <span className="ml-1 text-xs text-muted">(you)</span>}</td>
+                <td>{fmtDate(u.created_at)}</td>
+                <td>
+                  {me?.role === "admin" && u.id !== me.userId ? (
+                    <form action={setRoleAction} className="flex items-center gap-1">
+                      <input type="hidden" name="id" value={u.id} />
+                      <select name="role" defaultValue={u.role} aria-label={`Role for ${u.full_name}`} className="input w-auto py-1">
+                        <option value="admin">Admin</option><option value="staff">Staff</option><option value="student">Student</option>
+                      </select>
+                      <button className="btn-navy py-1 text-xs">Save</button>
+                    </form>
+                  ) : (
+                    <span className="capitalize">{u.role}</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
     </>
   );
 }

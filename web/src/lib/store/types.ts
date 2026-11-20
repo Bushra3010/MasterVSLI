@@ -21,7 +21,14 @@ export type TableName =
   | "placement_drives"
   | "drive_responses"
   | "staff"
-  | "issued_letters";
+  | "issued_letters"
+  | "lab_systems"
+  | "staff_attendance"
+  | "leave_requests"
+  | "payroll"
+  | "finance_entries"
+  | "messages"
+  | "profiles";
 
 export interface Query {
   eq?: Record<string, string | number | boolean | null>;

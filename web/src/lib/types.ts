@@ -100,6 +100,7 @@ export interface Course {
   duration_months: number;
   validity_months: number;
   fee: number;
+  syllabus?: string | null;
 }
 export interface Batch {
   id: string;
@@ -327,4 +328,77 @@ export interface AttendanceInput {
   check_out?: string;
   duration_minutes: number;
   external_ref?: string;
+}
+
+// ---- added modules: lab, HR, finance, communication ---------------------------
+export type LabStatus = "available" | "assigned" | "maintenance";
+export interface LabSystem {
+  id: string;
+  code: string;
+  location?: string | null;
+  specs?: string | null;
+  teamviewer_id?: string | null;
+  status: LabStatus;
+  student_id?: string | null;
+  assigned_at?: string | null;
+  notes?: string | null;
+}
+export type StaffAttStatus = "present" | "absent" | "half_day" | "leave";
+export interface StaffAttendance {
+  id: string;
+  staff_id: string;
+  att_date: string;
+  status: StaffAttStatus;
+}
+export interface LeaveRequest {
+  id: string;
+  staff_id: string;
+  from_date: string;
+  to_date: string;
+  leave_type: string;
+  reason?: string | null;
+  status: "pending" | "approved" | "rejected";
+  created_at?: string;
+}
+export interface PayrollRow {
+  id: string;
+  staff_id: string;
+  month: string;
+  working_days: number;
+  paid_days: number;
+  gross: number;
+  deductions: number;
+  net: number;
+  status: "pending" | "paid";
+  paid_at?: string | null;
+}
+export type FinanceKind = "income" | "expense" | "settlement";
+export interface FinanceEntry {
+  id: string;
+  kind: FinanceKind;
+  category: string;
+  amount: number;
+  entry_date: string;
+  vendor_id?: string | null;
+  reference?: string | null;
+  note?: string | null;
+  created_at?: string;
+}
+export interface MessageRow {
+  id: string;
+  channel: "email" | "whatsapp";
+  audience: string;
+  subject?: string | null;
+  body: string;
+  recipients: number;
+  sent: number;
+  status: string;
+  created_at: string;
+}
+
+export interface ProfileRow {
+  id: string;
+  full_name: string;
+  role: Role;
+  created_at?: string;
 }

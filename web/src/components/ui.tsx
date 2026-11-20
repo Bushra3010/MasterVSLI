@@ -3,10 +3,13 @@ import type { ReactNode } from "react";
 
 export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: ReactNode }) {
   return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+    <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-navy">{title}</h1>
-        {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
+        <h1 className="text-lg font-medium text-navy">{title}</h1>
+        <nav className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted" aria-label="Breadcrumb">
+          <span>Dashboard</span><span>/</span><span className="text-navy">{title}</span>
+        </nav>
+        {subtitle && <p className="mt-1.5 max-w-3xl text-[13px] text-muted">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </div>
@@ -22,10 +25,10 @@ export function Card({ title, icon, actions, children, className, bodyClass }: {
   bodyClass?: string;
 }) {
   return (
-    <section className={clsx("overflow-hidden rounded-xl border border-line bg-white shadow-sm", className)}>
+    <section className={clsx("overflow-hidden rounded-[5px] border border-line bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]", className)}>
       {title && (
-        <header className="flex items-center justify-between gap-2 border-b border-line bg-navy px-4 py-2.5 text-white">
-          <h2 className="flex items-center gap-2 text-sm font-semibold">
+        <header className="flex items-center justify-between gap-2 border-b border-line px-4 py-3 text-navy">
+          <h2 className="flex items-center gap-2 text-[15px] font-medium [&_svg]:text-brand">
             {icon}
             {title}
           </h2>
@@ -76,15 +79,17 @@ export function StatusBadge({ status }: { status: string }) {
 }
 
 export function Stat({ label, value, hint, tone = "navy", icon }: { label: string; value: ReactNode; hint?: string; tone?: "navy" | "green" | "amber" | "red" | "blue"; icon?: ReactNode }) {
-  const color = { navy: "text-navy", green: "text-emerald-600", amber: "text-amber-600", red: "text-brand", blue: "text-blue-600" }[tone];
+  const color = { navy: "text-brand", green: "text-emerald-600", amber: "text-amber-600", red: "text-red-600", blue: "text-sky-600" }[tone];
   return (
-    <div className="rounded-xl border border-line bg-white p-4 shadow-sm">
-      <div className="flex items-center justify-between text-xs font-medium text-muted">
-        {label}
-        <span className={color}>{icon}</span>
+    <div className="rounded-[5px] border border-line bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+      <div className="flex items-start gap-3">
+        {icon && <span className={clsx("grid size-10 shrink-0 place-items-center rounded-[5px] bg-navy-soft", color)}>{icon}</span>}
+        <div className="min-w-0">
+          <div className={clsx("text-xl font-medium tabular-nums", tone === "navy" ? "text-navy" : color)}>{value}</div>
+          <div className="text-[13px] text-muted">{label}</div>
+        </div>
       </div>
-      <div className={clsx("mt-1 text-2xl font-semibold tabular-nums", color)}>{value}</div>
-      {hint && <div className="mt-0.5 text-xs text-muted">{hint}</div>}
+      {hint && <div className="mt-3 border-t border-line pt-2 text-xs text-muted">{hint}</div>}
     </div>
   );
 }
@@ -104,7 +109,7 @@ export function Empty({ children }: { children: ReactNode }) {
 
 export function Progress({ value, tone }: { value: number; tone?: "green" | "amber" | "red" }) {
   const t = tone ?? (value >= 75 ? "green" : value >= 60 ? "amber" : "red");
-  const bg = { green: "bg-emerald-500", amber: "bg-amber-500", red: "bg-brand" }[t];
+  const bg = { green: "bg-emerald-500", amber: "bg-amber-500", red: "bg-red-500" }[t];
   return (
     <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
       <div className={clsx("h-full rounded-full", bg)} style={{ width: `${Math.min(100, Math.max(0, value))}%` }} />

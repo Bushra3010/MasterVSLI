@@ -1,6 +1,24 @@
 @import "tailwindcss";
 
-@theme inline {
+/* Admin theme: blue primary, dark slate headings, light canvas (reference dashboard style). */
+@theme {
+  --color-brand: #3d5ee1;
+  --color-brand-dark: #2c48c4;
+  --color-brand-soft: #eef1fd;
+  --color-navy: #202c4b;
+  --color-navy-soft: #f2f5ff;
+  --color-ink: #202c4b;
+  --color-muted: #6a7287;
+  --color-line: #e9edf4;
+  --color-canvas: #f7f7fa;
+  --color-teal-soft: #e0f6fa;
+  --color-teal-ink: #0b7c92;
+  --font-sans: var(--font-roboto);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* Certificates, ID cards and letters keep the institute's red/navy branding. */
+.brand-classic {
   --color-brand: #c8102e;
   --color-brand-dark: #9e0c24;
   --color-brand-soft: #fdecee;
@@ -9,9 +27,6 @@
   --color-ink: #0f172a;
   --color-muted: #64748b;
   --color-line: #e2e8f0;
-  --color-canvas: #f4f6fa;
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
 }
 
 body {
@@ -20,15 +35,19 @@ body {
   font-family: var(--font-sans), system-ui, sans-serif;
 }
 
+@utility btn {
+  @apply inline-flex items-center justify-center gap-1.5 rounded-[5px] px-3 py-2 text-[13px] font-medium transition disabled:opacity-50;
+}
+
+/* Component classes live in the components layer so utilities (w-28, py-1 …) can override them. */
+@layer components {
 .input {
-  @apply w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-navy focus:ring-2 focus:ring-navy/15;
+  @apply w-full rounded-[5px] border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-brand/15;
 }
 .label {
   @apply mb-1 block text-xs font-medium text-muted;
 }
-@utility btn {
-  @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition disabled:opacity-50;
-}
+
 .btn-primary {
   @apply btn bg-brand text-white hover:bg-brand-dark;
 }
@@ -38,14 +57,21 @@ body {
 .btn-ghost {
   @apply btn border border-line bg-white text-ink hover:bg-slate-50;
 }
+.btn-soft {
+  @apply btn bg-teal-soft text-teal-ink hover:brightness-95;
+}
 .table {
   @apply w-full text-left text-sm;
 }
+.table {
+  @apply text-[13px];
+}
 .table th {
-  @apply border-b border-line bg-slate-50 px-3 py-2 text-xs font-semibold tracking-wide text-muted uppercase;
+  @apply border-b border-line bg-[#f9fafb] px-3 py-2.5 text-xs font-medium text-navy;
 }
 .table td {
-  @apply border-b border-line px-3 py-2 align-middle;
+  @apply border-b border-line px-3 py-2.5 align-middle text-[#515b73];
+}
 }
 
 @media print {

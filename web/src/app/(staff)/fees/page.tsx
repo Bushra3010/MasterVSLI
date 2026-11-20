@@ -55,7 +55,7 @@ export default async function FeesPage({ searchParams }: PageProps<"/fees">) {
 
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
         {tree.map(({ v, allocated, paid, students: n, subs }) => (
-          <Card key={v.id} title={v.name} actions={<span className="text-xs text-white/80">{n} students</span>}>
+          <Card key={v.id} title={v.name} actions={<span className="text-xs text-muted">{n} students</span>}>
             <div className="flex items-end justify-between">
               <div>
                 <div className="text-xs text-muted">Allocated</div>
@@ -90,7 +90,7 @@ export default async function FeesPage({ searchParams }: PageProps<"/fees">) {
         actions={
           <div className="flex gap-1 text-xs">
             {["due", "overdue", "all"].map((f) => (
-              <Link key={f} href={`/fees?show=${f}`} className={`rounded px-2 py-0.5 capitalize ${filter === f ? "bg-white text-navy" : "text-white/80 hover:text-white"}`}>{f}</Link>
+              <Link key={f} href={`/fees?show=${f}`} className={`rounded px-2 py-0.5 capitalize ${filter === f ? "bg-brand text-white" : "text-muted hover:text-brand"}`}>{f}</Link>
             ))}
           </div>
         }

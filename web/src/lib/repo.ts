@@ -17,7 +17,16 @@ import type {
   DriveResponseValue,
   DriveStatus,
   Education,
+  FinanceEntry,
   Installment,
+  LabSystem,
+  LeaveRequest,
+  MessageRow,
+  PayrollRow,
+  ProfileRow,
+  Role,
+  StaffAttendance,
+  StaffAttStatus,
   Letter,
   LetterTemplate,
   NewDriveInput,
@@ -387,6 +396,93 @@ export function createRepo(db: Store) {
       if (s.id) await db.update<Staff>("staff", { id: s.id }, s);
       else await db.insert<Staff>("staff", [s]);
     },
+
+    // ---- system / lab ----------------------------------------------------------
+    labSystems: () => db.select<LabSystem>("lab_systems", { order: { column: "code" } }),
+    async saveLabSystem(l: Partial<LabSystem> & { id?: string }) {
+      if (l.id) await db.update<LabSystem>("lab_systems", { id: l.id }, l);
+      else await db.insert<LabSystem>("lab_systems", [{ status: "available", ...l }]);
+    },
+    /** Assign a lab system to a student (or free it) and keep the student's TeamViewer mapping in sync. */
+    async assignLabSystem(id: string, student_id: string | null) {
+      const [sys] = await db.select<LabSystem>("lab_systems", { eq: { id } });
+      if (!sys) throw new Error("System not found");
+      if (sys.student_id && sys.student_id !== student_id && sys.teamviewer_id)
+        await db.update<AccessRow>("student_access", { student_id: sys.student_id, channel: "teamviewer" }, { external_ref: null });
+      await db.update<LabSystem>("lab_systems", { id }, student_id
+        ? { student_id, status: "assigned", assigned_at: new Date().toISOString() }
+        : { student_id: null, status: "available", assigned_at: null });
+      if (student_id && sys.teamviewer_id)
+        await db.update<AccessRow>("student_access", { student_id, channel: "teamviewer" }, { external_ref: sys.teamviewer_id });
+    },
+    setLabStatus: (id: string, status: "available" | "maintenance") =>
+      db.update<LabSystem>("lab_systems", { id }, { status, student_id: null, assigned_at: null }),
+    removeLabSystem: (id: string) => db.remove("lab_systems", { id }),
+
+    // ---- staff & HR ------------------------------------------------------------
+    staffAttendance: (from: string, to: string) =>
+      db.select<StaffAttendance>("staff_attendance", { gte: { att_date: from }, lte: { att_date: to } }),
+    async markStaffAttendance(att_date: string, marks: { staff_id: string; status: StaffAttStatus }[]) {
+      if (marks.length) await db.upsert<StaffAttendance>("staff_attendance", marks.map((m) => ({ ...m, att_date })), "staff_id,att_date");
+    },
+    leaveRequests: () => db.select<LeaveRequest>("leave_requests", { order: { column: "from_date", ascending: false } }),
+    async addLeave(l: Omit<LeaveRequest, "id" | "status" | "created_at">) {
+      await db.insert<LeaveRequest>("leave_requests", [{ ...l, status: "pending", created_at: new Date().toISOString() }]);
+    },
+    /** Approving a leave marks those days as "leave" in staff attendance. */
+    async decideLeave(id: string, status: "approved" | "rejected") {
+      const [l] = await db.select<LeaveRequest>("leave_requests", { eq: { id } });
+      if (!l) return;
+      await db.update<LeaveRequest>("leave_requests", { id }, { status });
+      if (status === "approved")
+        for (let d = l.from_date; d <= l.to_date; d = addDays(d, 1))
+          await db.upsert<StaffAttendance>("staff_attendance", [{ staff_id: l.staff_id, att_date: d, status: "leave" }], "staff_id,att_date");
+    },
+    payroll: (month?: string) =>
+      db.select<PayrollRow>("payroll", month ? { eq: { month } } : { order: { column: "month", ascending: false } }),
+    /**
+     * Payroll for a month: working days = Mon–Sat; absent days are unpaid, half days count ½,
+     * approved leave is paid. Days with no mark count as present. Already-paid rows are kept.
+     */
+    async generatePayroll(month: string) {
+      const first = `${month}-01`;
+      const last = addDays(addMonths(first, 1), -1);
+      let working = 0;
+      for (let d = first; d <= last; d = addDays(d, 1)) if (new Date(d + "T00:00:00Z").getUTCDay() !== 0) working++;
+      const [staff, att, existing] = await Promise.all([repo.staff(), repo.staffAttendance(first, last), repo.payroll(month)]);
+      const rows: Partial<PayrollRow>[] = [];
+      for (const s of staff) {
+        if (existing.find((p) => p.staff_id === s.id && p.status === "paid")) continue;
+        const mine = att.filter((a) => a.staff_id === s.id);
+        const lost = mine.filter((a) => a.status === "absent").length + 0.5 * mine.filter((a) => a.status === "half_day").length;
+        const gross = Number(s.monthly_salary ?? 0);
+        const paid_days = Math.max(0, working - lost);
+        const deductions = working ? Math.round((gross * lost) / working) : 0;
+        rows.push({ staff_id: s.id, month, working_days: working, paid_days, gross, deductions, net: gross - deductions, status: "pending" });
+      }
+      if (rows.length) await db.upsert<PayrollRow>("payroll", rows, "staff_id,month");
+      return rows.length;
+    },
+    async markPayrollPaid(id: string) {
+      await db.update<PayrollRow>("payroll", { id }, { status: "paid", paid_at: new Date().toISOString() });
+    },
+
+    // ---- accounts & finance ----------------------------------------------------
+    financeEntries: () => db.select<FinanceEntry>("finance_entries", { order: { column: "entry_date", ascending: false } }),
+    async addFinanceEntry(e: Omit<FinanceEntry, "id" | "created_at">) {
+      await db.insert<FinanceEntry>("finance_entries", [{ ...e, created_at: new Date().toISOString() }]);
+    },
+    removeFinanceEntry: (id: string) => db.remove("finance_entries", { id }),
+
+    // ---- communication ---------------------------------------------------------
+    messages: () => db.select<MessageRow>("messages", { order: { column: "created_at", ascending: false }, limit: 50 }),
+    async logMessage(m: Omit<MessageRow, "id" | "created_at">) {
+      await db.insert<MessageRow>("messages", [{ ...m, created_at: new Date().toISOString() }]);
+    },
+
+    // ---- users & roles -----------------------------------------------------------
+    profiles: () => db.select<ProfileRow>("profiles", { order: { column: "created_at" } }),
+    setRole: (id: string, role: Role) => db.update<ProfileRow>("profiles", { id }, { role }),
 
     markNotificationSent: (id: number) => db.update<NotificationRow>("notifications", { id }, { sent_at: new Date().toISOString() }),
     studentNotifications: (student_id: string) =>

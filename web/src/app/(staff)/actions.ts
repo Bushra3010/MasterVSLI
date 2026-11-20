@@ -224,7 +224,7 @@ export async function saveCourseAction(form: FormData) {
     })
     .parse(Object.fromEntries(form));
   await (await getRepo()).saveCourse({ ...c, code: c.code.toUpperCase(), id: idOf(form) });
-  revalidatePath("/settings");
+  revalidatePath("/", "layout");
 }
 
 export async function saveBatchAction(form: FormData) {
@@ -233,7 +233,7 @@ export async function saveBatchAction(form: FormData) {
     .object({ course_id: z.string().min(1), name: z.string().trim().min(2), mode: z.enum(["online", "offline", "hybrid"]), start_date: z.string().optional() })
     .parse(Object.fromEntries(form));
   await (await getRepo()).saveBatch({ ...b, start_date: b.start_date || null, id: idOf(form) });
-  revalidatePath("/settings");
+  revalidatePath("/", "layout");
 }
 
 export async function saveVendorAction(form: FormData) {
