@@ -6,9 +6,8 @@
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
   "observability": { "enabled": true },
-  // Public values; secrets (SUPABASE_SERVICE_ROLE_KEY, CRON_SECRET, ZOOM_WEBHOOK_SECRET,
-  // BIOMETRIC_API_KEY, TEAMVIEWER_API_KEY, GOOGLE_SERVICE_ACCOUNT_JSON) go in via `wrangler secret put`.
-  "vars": {
-    "NEXT_PUBLIC_APP_URL": "https://erp.mastervlsi.com"
-  }
+  // Secrets (SUPABASE_SERVICE_ROLE_KEY, CRON_SECRET, ZOOM_WEBHOOK_SECRET, BIOMETRIC_API_KEY,
+  // TEAMVIEWER_API_KEY, GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_SHEET_ID) go in via `wrangler secret put`.
+  // Optional var APP_URL pins the domain used in certificate QR codes.
+  "vars": {}
 }

@@ -4,7 +4,9 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-11-01",
   // 00:30 UTC = 06:00 IST
+  // No public URL: this worker only runs on its schedule.
+  "workers_dev": false,
   "triggers": { "crons": ["30 0 * * *"] },
-  "vars": { "ERP_URL": "https://erp.mastervlsi.com" }
+  "vars": { "ERP_URL": "https://mastervlsi-erp.mastervlsi-erp.workers.dev" }
   // secret: npx wrangler secret put CRON_SECRET
 }

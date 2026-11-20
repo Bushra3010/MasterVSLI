@@ -24,7 +24,9 @@ export async function loadLetter(repo: Repo, serial: string) {
     letter.staff_id ? repo.staff().then((s) => s.find((x) => x.id === letter.staff_id) ?? null) : null,
   ]);
   const h = await headers();
-  const base = process.env.NEXT_PUBLIC_APP_URL || `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`;
+  // APP_URL (runtime, optional) pins a custom domain; otherwise use the host the request came in on.
+  const proto = h.get("x-forwarded-proto") ?? (h.get("host")?.startsWith("localhost") ? "http" : "https");
+  const base = process.env.APP_URL || `${proto}://${h.get("host")}`;
   const verifyUrl = `${base}/verify/${letter.serial_no}`;
   const qr = await QRCode.toDataURL(verifyUrl, { margin: 0, width: 220, color: { dark: "#0f2a4a" } });
   return { letter, student: profile?.student ?? null, course: profile?.course ?? null, staff, verifyUrl, qr };
