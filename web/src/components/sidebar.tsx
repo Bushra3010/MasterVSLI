@@ -13,6 +13,7 @@ import {
   KeyRound,
   Landmark,
   Layers,
+  ListTodo,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -41,6 +42,7 @@ const staffNav: Section[] = [
     items: [
       { href: "/dashboard", label: "Admin Dashboard", icon: LayoutDashboard },
       { href: "/reports", label: "Reports & Dashboard", icon: BarChart3 },
+      { href: "/me", label: "My Workspace", icon: ListTodo },
     ],
   },
   {

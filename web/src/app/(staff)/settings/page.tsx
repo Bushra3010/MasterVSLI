@@ -11,6 +11,9 @@ const INTEGRATIONS: { name: string; use: string; env: string[]; hook?: string }[
   { name: "Google Sheets", use: "Placement applicants, one sheet per drive", env: ["GOOGLE_SERVICE_ACCOUNT_JSON", "GOOGLE_SHEET_ID"] },
   { name: "Email (Resend)", use: "Expiry reminders and email broadcasts", env: ["RESEND_API_KEY", "NOTIFY_FROM"] },
   { name: "WhatsApp Cloud API", use: "WhatsApp broadcasts", env: ["WHATSAPP_TOKEN", "WHATSAPP_PHONE_ID"] },
+  { name: "Razorpay", use: "Online fee payments (UPI, GPay, PhonePe, card)", env: ["RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET"], hook: "/api/webhooks/razorpay" },
+  { name: "UPI (direct)", use: "UPI QR for fee payments, confirmed by staff", env: ["UPI_VPA"] },
+  { name: "Website", use: "Admission enquiries from your website", env: ["WEBSITE_ORIGIN"], hook: "/api/public/admission · /apply" },
   { name: "Daily cron", use: "Validity reminders & auto-expiry", env: ["CRON_SECRET"], hook: "/api/cron/expiry" },
   { name: "Supabase service role", use: "Student portal logins, webhooks", env: ["SUPABASE_SERVICE_ROLE_KEY"] },
 ];

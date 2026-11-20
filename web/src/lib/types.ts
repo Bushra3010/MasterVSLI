@@ -201,6 +201,7 @@ export interface DriveResponse {
 }
 export interface Staff {
   id: string;
+  user_id?: string | null;
   employee_code: string;
   full_name: string;
   designation?: string | null;
@@ -401,4 +402,40 @@ export interface ProfileRow {
   full_name: string;
   role: Role;
   created_at?: string;
+}
+
+export interface StaffTask {
+  id: string;
+  staff_id: string;
+  title: string;
+  due_date?: string | null;
+  done: boolean;
+  done_at?: string | null;
+  created_at?: string;
+}
+export interface PaymentRequest {
+  id: string;
+  installment_id: string;
+  student_id: string;
+  amount: number;
+  provider: "razorpay" | "upi";
+  external_id?: string | null;
+  url?: string | null;
+  status: "created" | "paid" | "cancelled";
+  paid_reference?: string | null;
+  created_at: string;
+  paid_at?: string | null;
+}
+export interface AdmissionEnquiry {
+  id: string;
+  full_name: string;
+  email?: string | null;
+  phone?: string | null;
+  course_code?: string | null;
+  city?: string | null;
+  message?: string | null;
+  source: string;
+  status: "new" | "contacted" | "admitted" | "closed";
+  student_id?: string | null;
+  created_at: string;
 }

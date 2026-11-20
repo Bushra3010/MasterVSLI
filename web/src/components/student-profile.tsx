@@ -38,7 +38,9 @@ export function StudentProfileView({
   paymentControl,
   documentControl,
   uploadSlot,
+  receiptBase = "/fees/receipt/",
 }: {
+  receiptBase?: string;
   p: StudentProfile;
   channelControl?: (channel: Channel, enabled: boolean) => ReactNode;
   paymentControl?: (installmentId: string, balance: number) => ReactNode;
@@ -223,6 +225,19 @@ export function StudentProfileView({
             </div>
           ))}
         </div>
+        {p.payments.length > 0 && (
+          <div className="mt-3 border-t border-line pt-2">
+            <div className="mb-1 text-xs font-medium text-navy">Payments &amp; receipts</div>
+            <ul className="space-y-1">
+              {p.payments.map((pay) => (
+                <li key={pay.id} className="flex items-center justify-between gap-2 text-xs">
+                  <span>{fmtDate(pay.paid_at)} · {pay.mode} · <b className="tabular-nums">{inr(pay.amount)}</b></span>
+                  <Link href={`${receiptBase}${pay.id}`} className="font-medium text-brand hover:underline">Receipt</Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </Card>
 
       <Card title="Company applications" icon={<Briefcase size={15} />} bodyClass="p-0">

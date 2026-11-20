@@ -6,7 +6,7 @@ import { addDays, fmtDate, inr, todayISO } from "@/lib/format";
 import { getRepo } from "@/lib/server";
 import type { StaffAttStatus } from "@/lib/types";
 import { saveStaffAction } from "../actions";
-import { addLeaveAction, decideLeaveAction, generatePayrollAction, markPayrollPaidAction, markStaffAttendanceAction } from "../module-actions";
+import { addLeaveAction, addTaskAction, decideLeaveAction, generatePayrollAction, markPayrollPaidAction, markStaffAttendanceAction, toggleTaskAction } from "../module-actions";
 
 export const metadata = { title: "Staff & HR" };
 
@@ -26,7 +26,7 @@ export default async function HrPage({ searchParams }: PageProps<"/hr">) {
   const days = Array.from({ length: 14 }, (_, k) => addDays(today, -13 + k));
 
   const repo = await getRepo();
-  const [staff, att, leaves, payroll] = await Promise.all([repo.staff(), repo.staffAttendance(days[0] < date ? days[0] : date, today > date ? today : date), repo.leaveRequests(), repo.payroll(month)]);
+  const [tasks, staff, att, leaves, payroll] = await Promise.all([repo.tasks(), repo.staff(), repo.staffAttendance(days[0] < date ? days[0] : date, today > date ? today : date), repo.leaveRequests(), repo.payroll(month)]);
   const name = new Map(staff.map((s) => [s.id, s.full_name]));
   const mark = (staffId: string, d: string) => att.find((a) => a.staff_id === staffId && a.att_date === d)?.status;
   const todayMarks = staff.map((s) => mark(s.id, today));
@@ -78,6 +78,31 @@ export default async function HrPage({ searchParams }: PageProps<"/hr">) {
           </form>
         </Card>
       </div>
+
+      <Card title={`Daily tasks (${tasks.filter((t) => !t.done).length} open)`} icon={<CalendarCheck size={15} />} className="mt-5" bodyClass="p-0 overflow-x-auto">
+        <form action={addTaskAction} className="flex flex-wrap items-center gap-2 border-b border-line p-3">
+          <select name="staff_id" required aria-label="Assign to" className="input w-auto py-1.5">
+            {staff.map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+          </select>
+          <input name="title" required placeholder="Task, e.g. Evaluate assignment 3" aria-label="Task" className="input min-w-48 flex-1 py-1.5" />
+          <input name="due_date" type="date" defaultValue={today} aria-label="Due date" className="input w-auto py-1.5" />
+          <Save label="Assign task" />
+        </form>
+        <table className="table">
+          <thead><tr><th>Staff</th><th>Task</th><th>Due</th><th>Status</th></tr></thead>
+          <tbody>
+            {tasks.slice(0, 15).map((t) => (
+              <tr key={t.id}>
+                <td className="font-medium">{name.get(t.staff_id)}</td>
+                <td className={t.done ? "text-muted line-through" : ""}>{t.title}</td>
+                <td className={!t.done && t.due_date && t.due_date < today ? "text-red-600" : ""}>{fmtDate(t.due_date)}</td>
+                <td><form action={toggleTaskAction.bind(null, t.id, !t.done)}><button><Badge tone={t.done ? "green" : "amber"}>{t.done ? "Done" : "Open"}</Badge></button></form></td>
+              </tr>
+            ))}
+            {!tasks.length && <tr><td colSpan={4} className="text-center text-muted">No tasks yet.</td></tr>}
+          </tbody>
+        </table>
+      </Card>
 
       <Card title="Leave requests" icon={<CalendarOff size={15} />} className="mt-5" bodyClass="p-0 overflow-x-auto">
         <table className="table">

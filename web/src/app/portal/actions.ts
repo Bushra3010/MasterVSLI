@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import QRCode from "qrcode";
 import { syncDriveToSheet } from "@/lib/integrations/google-sheets";
 import { getRepo, getServiceRepo } from "@/lib/server";
 import { requireStudent } from "@/lib/session";
@@ -43,4 +44,52 @@ export async function portalUploadAction(_: unknown, form: FormData) {
   const res = await uploadStudentDocument(await getStudentReadRepo(), s.studentId, form);
   if (res.ok) revalidatePath("/portal", "layout");
   return res;
+}
+
+export type PayResult =
+  | { ok: true; kind: "razorpay"; url: string }
+  | { ok: true; kind: "upi"; link: string; qr: string; amount: number }
+  | { ok: false; message: string };
+
+/** Student starts an online payment for one of their own installments. */
+export async function payOnlineAction(installmentId: string): Promise<PayResult> {
+  const s = await requireStudent();
+  const pay = await import("@/lib/payments");
+  const repo = getServiceRepo(); // students can't write payment_requests under RLS; ownership is checked here
+  const p = await repo.profile(s.studentId);
+  const inst = p?.installments.find((i) => i.id === installmentId);
+  if (!p || !inst) return { ok: false, message: "Installment not found." };
+  const amount = Number(inst.amount) - Number(inst.paid_amount);
+  if (amount <= 0) return { ok: false, message: "This installment is already paid." };
+
+  if (pay.razorpayConfigured()) {
+    const { headers } = await import("next/headers");
+    const h = await headers();
+    const base = process.env.APP_URL || `${h.get("x-forwarded-proto") ?? "https"}://${h.get("host")}`;
+    const req = await repo.createPaymentRequest({ installment_id: inst.id, student_id: s.studentId, amount, provider: "razorpay", external_id: null, url: null });
+    try {
+      const link = await pay.createRazorpayLink({
+        amount,
+        description: `MasterVLSI fee · ${p.student.enrollment_no} · installment ${inst.seq}`,
+        referenceId: req.id,
+        name: p.student.full_name,
+        email: p.student.email,
+        phone: p.student.phone,
+        callbackUrl: `${base}/portal?paid=1`,
+      });
+      const { getServiceStore } = await import("@/lib/session");
+      await getServiceStore().update("payment_requests", { id: req.id }, { external_id: link.id, url: link.url });
+      return { ok: true, kind: "razorpay", url: link.url };
+    } catch {
+      return { ok: false, message: "Could not start the online payment. Please try again or pay at the office." };
+    }
+  }
+  if (pay.upiConfigured()) {
+    const link = pay.upiLink(amount, `${p.student.enrollment_no} inst ${inst.seq}`);
+    await repo.createPaymentRequest({ installment_id: inst.id, student_id: s.studentId, amount, provider: "upi", external_id: null, url: link });
+    const qr = await QRCode.toDataURL(link, { margin: 1, width: 220 });
+    revalidatePath("/portal");
+    return { ok: true, kind: "upi", link, qr, amount };
+  }
+  return { ok: false, message: "Online payment isn't set up yet. Please pay at the office." };
 }

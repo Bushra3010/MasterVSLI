@@ -1,6 +1,7 @@
 import { AlertTriangle, Bell } from "lucide-react";
 import { noticeText } from "@/lib/notify";
 import { StudentProfileView } from "@/components/student-profile";
+import { PayNow } from "./pay-now";
 import { Badge, Card, StatusBadge } from "@/components/ui";
 import { daysBetween, fmtDate, todayISO } from "@/lib/format";
 import { getStudentReadRepo } from "@/lib/server";
@@ -8,7 +9,8 @@ import { requireStudent } from "@/lib/session";
 
 export const metadata = { title: "My dashboard" };
 
-export default async function PortalHome() {
+export default async function PortalHome({ searchParams }: PageProps<"/portal">) {
+  const sp = await searchParams;
   const s = await requireStudent();
   const repo = await getStudentReadRepo();
   const [p, notices] = await Promise.all([repo.profile(s.studentId), repo.studentNotifications(s.studentId)]);
@@ -17,7 +19,7 @@ export default async function PortalHome() {
   const left = st.validity_end ? daysBetween(todayISO(), st.validity_end) : null;
   return (
     <>
-      <div className="mb-5 rounded-xl bg-gradient-to-r from-navy to-[#1c3d66] p-5 text-white shadow">
+      <div className="mb-5 rounded-[5px] bg-navy p-5 text-white">
         <div className="text-sm opacity-80">Welcome back,</div>
         <h1 className="text-2xl font-semibold">{st.full_name}</h1>
         <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
@@ -50,7 +52,12 @@ export default async function PortalHome() {
           </ul>
         </Card>
       )}
-      <StudentProfileView p={p} />
+      {sp.paid && (
+        <div className="mb-5 rounded-[5px] border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-800">
+          Thank you! Your payment is being confirmed. The receipt appears under Fee &amp; payment summary within a minute.
+        </div>
+      )}
+      <StudentProfileView p={p} receiptBase="/portal/receipt/" paymentControl={(id) => <PayNow installmentId={id} />} />
     </>
   );
 }

@@ -6,8 +6,10 @@ import { inr, todayISO } from "@/lib/format";
 import type { Batch, Course, Vendor } from "@/lib/types";
 import { createStudentAction } from "../../actions";
 
-export function AdmissionForm({ courses, batches, vendors }: { courses: Course[]; batches: Batch[]; vendors: Vendor[] }) {
-  const [courseId, setCourseId] = useState(courses[0]?.id ?? "");
+export type AdmissionDefaults = { enquiry_id?: string; full_name?: string; email?: string; phone?: string; city?: string; course_code?: string };
+
+export function AdmissionForm({ courses, batches, vendors, defaults = {} }: { courses: Course[]; batches: Batch[]; vendors: Vendor[]; defaults?: AdmissionDefaults }) {
+  const [courseId, setCourseId] = useState(courses.find((c) => c.code === defaults.course_code)?.id ?? courses[0]?.id ?? "");
   const course = courses.find((c) => c.id === courseId);
   const [fee, setFee] = useState(course?.fee ?? 0);
   const parents = vendors.filter((v) => !v.parent_id);
@@ -26,24 +28,25 @@ export function AdmissionForm({ courses, batches, vendors }: { courses: Course[]
 
   return (
     <form action={createStudentAction} className="grid gap-5 xl:grid-cols-2">
+      {defaults.enquiry_id && <input type="hidden" name="enquiry_id" value={defaults.enquiry_id} />}
       <Card title="Personal & contact">
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <label className="label">Full name *</label>
-            <input name="full_name" required className="input" />
+            <input name="full_name" required defaultValue={defaults.full_name} className="input" />
           </div>
-          <div><label className="label">Email</label><input name="email" type="email" className="input" /></div>
-          <div><label className="label">Mobile</label><input name="phone" className="input" /></div>
+          <div><label className="label">Email</label><input name="email" type="email" defaultValue={defaults.email} className="input" /></div>
+          <div><label className="label">Mobile</label><input name="phone" defaultValue={defaults.phone} className="input" /></div>
           <div>
             <label className="label">Gender</label>
             <select name="gender" className="input"><option>Female</option><option>Male</option><option>Other</option></select>
           </div>
           <div><label className="label">Date of birth</label><input name="dob" type="date" className="input" /></div>
-          <div><label className="label">City</label><input name="city" className="input" /></div>
+          <div><label className="label">City</label><input name="city" defaultValue={defaults.city} className="input" /></div>
           <div><label className="label">State</label><input name="state" className="input" /></div>
           <div>
             <label className="label">Lead source</label>
-            <select name="lead_source" className="input">
+            <select name="lead_source" defaultValue={defaults.enquiry_id ? "Website" : undefined} className="input">
               {["Website", "Google", "Instagram", "LinkedIn", "Referral", "Walk-in"].map((s) => <option key={s}>{s}</option>)}
             </select>
           </div>

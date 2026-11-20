@@ -42,6 +42,8 @@ export async function createStudentAction(form: FormData) {
 
   const repo = await getRepo();
   const s = await repo.createStudent({ ...input, allocations });
+  const enquiryId = String(form.get("enquiry_id") || "");
+  if (enquiryId) await repo.setEnquiry(enquiryId, { status: "admitted", student_id: s.id });
   revalidatePath("/students");
   redirect(`/students/${s.id}`);
 }

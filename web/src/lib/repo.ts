@@ -23,7 +23,10 @@ import type {
   LeaveRequest,
   MessageRow,
   PayrollRow,
+  PaymentRequest,
   ProfileRow,
+  StaffTask,
+  AdmissionEnquiry,
   Role,
   StaffAttendance,
   StaffAttStatus,
@@ -479,6 +482,54 @@ export function createRepo(db: Store) {
     async logMessage(m: Omit<MessageRow, "id" | "created_at">) {
       await db.insert<MessageRow>("messages", [{ ...m, created_at: new Date().toISOString() }]);
     },
+
+    // ---- staff self-service ------------------------------------------------------
+    /** The staff record for a login: linked by user_id, else matched by email. */
+    async staffForUser(userId?: string, email?: string) {
+      const all = await repo.staff();
+      return (
+        all.find((s) => userId && s.user_id === userId) ??
+        all.find((s) => email && s.email?.toLowerCase() === email.toLowerCase()) ??
+        null
+      );
+    },
+    tasks: (staff_id?: string) =>
+      db.select<StaffTask>("staff_tasks", staff_id ? { eq: { staff_id }, order: { column: "created_at", ascending: false } } : { order: { column: "created_at", ascending: false } }),
+    async addTask(t: { staff_id: string; title: string; due_date?: string | null }) {
+      await db.insert<StaffTask>("staff_tasks", [{ ...t, done: false, created_at: new Date().toISOString() }]);
+    },
+    setTaskDone: (id: string, done: boolean) =>
+      db.update<StaffTask>("staff_tasks", { id }, { done, done_at: done ? new Date().toISOString() : null }),
+    removeTask: (id: string) => db.remove("staff_tasks", { id }),
+
+    // ---- online payments ------------------------------------------------------------
+    paymentRequests: (student_id?: string) =>
+      db.select<PaymentRequest>("payment_requests", student_id ? { eq: { student_id }, order: { column: "created_at", ascending: false } } : { order: { column: "created_at", ascending: false } }),
+    async createPaymentRequest(r: Omit<PaymentRequest, "id" | "created_at" | "status">) {
+      const [row] = await db.insert<PaymentRequest>("payment_requests", [{ ...r, status: "created", created_at: new Date().toISOString() }]);
+      return row;
+    },
+    /** Marks a request paid and books the payment against its installment (idempotent). */
+    async completePaymentRequest(id: string, reference: string, mode: string) {
+      const [r] = await db.select<PaymentRequest>("payment_requests", { eq: { id } });
+      if (!r || r.status === "paid") return r ?? null;
+      await db.update<PaymentRequest>("payment_requests", { id }, { status: "paid", paid_reference: reference, paid_at: new Date().toISOString() });
+      await repo.recordPayment(r.installment_id, Number(r.amount), mode, reference);
+      return r;
+    },
+    async paymentRequestByExternal(external_id: string) {
+      return (await db.select<PaymentRequest>("payment_requests", { eq: { external_id } }))[0] ?? null;
+    },
+    async payment(id: string) {
+      return (await db.select<Payment>("payments", { eq: { id } }))[0] ?? null;
+    },
+
+    // ---- website admissions ----------------------------------------------------------
+    enquiries: () => db.select<AdmissionEnquiry>("admission_enquiries", { order: { column: "created_at", ascending: false } }),
+    async addEnquiry(e: Omit<AdmissionEnquiry, "id" | "created_at" | "status" | "student_id">) {
+      await db.insert<AdmissionEnquiry>("admission_enquiries", [{ ...e, status: "new", created_at: new Date().toISOString() }]);
+    },
+    setEnquiry: (id: string, patch: Partial<AdmissionEnquiry>) => db.update<AdmissionEnquiry>("admission_enquiries", { id }, patch),
 
     // ---- users & roles -----------------------------------------------------------
     profiles: () => db.select<ProfileRow>("profiles", { order: { column: "created_at" } }),

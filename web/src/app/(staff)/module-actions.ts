@@ -219,3 +219,83 @@ export async function setRoleAction(form: FormData) {
   await (await getRepo()).setRole(id, role);
   revalidatePath("/access");
 }
+
+// ---- website enquiries --------------------------------------------------------------------
+export async function setEnquiryStatusAction(id: string, status: "contacted" | "closed" | "new") {
+  await requireStaff();
+  await (await getRepo()).setEnquiry(id, { status });
+  revalidatePath("/students");
+}
+
+// ---- online payments (staff confirm UPI) ------------------------------------------------------
+export async function confirmPaymentRequestAction(id: string, form: FormData) {
+  await requireStaff();
+  const ref = String(form.get("reference") || "").trim();
+  if (ref.length < 4) throw new Error("Enter the UPI transaction / UTR number");
+  await (await getRepo()).completePaymentRequest(id, ref, "UPI");
+  revalidatePath("/", "layout");
+}
+
+export async function cancelPaymentRequestAction(id: string) {
+  await requireStaff();
+  const { getStore } = await import("@/lib/session");
+  await (await getStore()).update("payment_requests", { id }, { status: "cancelled" });
+  revalidatePath("/fees");
+}
+
+// ---- staff self-service ("Staff app") -------------------------------------------------------
+async function myStaff() {
+  const me = await requireStaff();
+  const repo = await getRepo();
+  const staff = (await repo.staffForUser(me.userId, me.email)) ?? (me.demo ? (await repo.staff())[0] : null);
+  if (!staff) throw new Error("Your login isn't linked to a staff record yet. Ask an admin to add your email in Staff & HR.");
+  return { repo, staff };
+}
+
+export async function checkInAction() {
+  const { repo, staff } = await myStaff();
+  await repo.markStaffAttendance(todayISO(), [{ staff_id: staff.id, status: "present" }]);
+  revalidatePath("/me");
+  revalidatePath("/hr");
+}
+
+export async function addTaskAction(form: FormData) {
+  const title = String(form.get("title") || "").trim();
+  if (title.length < 2) throw new Error("Write the task");
+  const due_date = String(form.get("due_date") || "") || null;
+  const assignee = String(form.get("staff_id") || "");
+  if (assignee) {
+    await requireStaff();
+    await (await getRepo()).addTask({ staff_id: assignee, title, due_date });
+  } else {
+    const { repo, staff } = await myStaff();
+    await repo.addTask({ staff_id: staff.id, title, due_date });
+  }
+  revalidatePath("/me");
+  revalidatePath("/hr");
+}
+
+export async function toggleTaskAction(id: string, done: boolean) {
+  await requireStaff();
+  await (await getRepo()).setTaskDone(id, done);
+  revalidatePath("/me");
+  revalidatePath("/hr");
+}
+
+export async function removeTaskAction(id: string) {
+  await requireStaff();
+  await (await getRepo()).removeTask(id);
+  revalidatePath("/me");
+  revalidatePath("/hr");
+}
+
+export async function applyLeaveAction(form: FormData) {
+  const { repo, staff } = await myStaff();
+  const l = z
+    .object({ from_date: z.string().min(10), to_date: z.string().min(10), leave_type: z.string().min(1), reason: z.string().optional() })
+    .refine((x) => x.to_date >= x.from_date, "End date is before start date")
+    .parse(Object.fromEntries(form));
+  await repo.addLeave({ staff_id: staff.id, ...l, reason: l.reason || null });
+  revalidatePath("/me");
+  revalidatePath("/hr");
+}

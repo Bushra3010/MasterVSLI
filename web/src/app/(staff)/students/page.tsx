@@ -3,6 +3,8 @@ import { Badge, Card, PageHeader, Progress, StatusBadge } from "@/components/ui"
 import { inr } from "@/lib/format";
 import { getRepo } from "@/lib/server";
 import type { StudentStatus } from "@/lib/types";
+import { fmtDate } from "@/lib/format";
+import { setEnquiryStatusAction } from "../module-actions";
 
 export const metadata = { title: "Students" };
 
@@ -14,15 +16,40 @@ export default async function StudentsPage({ searchParams }: PageProps<"/student
   const status = (typeof sp.status === "string" ? sp.status : "all") as StudentStatus | "all";
   const batch = typeof sp.batch === "string" ? sp.batch : "";
   const repo = await getRepo();
-  const [students, batches] = await Promise.all([repo.students({ q, status, batch: batch || undefined }), repo.batches()]);
+  const [students, batches, enquiries] = await Promise.all([repo.students({ q, status, batch: batch || undefined }), repo.batches(), repo.enquiries()]);
+  const openEnquiries = enquiries.filter((e) => e.status === "new" || e.status === "contacted");
 
   return (
     <>
       <PageHeader
         title="Students"
         subtitle={`${students.length} students`}
-        actions={<Link href="/students/new" className="btn-primary">+ New admission</Link>}
+        actions={<><Link href="/apply" target="_blank" className="btn-soft">Public admission form ↗</Link><Link href="/students/new" className="btn-primary">+ New admission</Link></>}
       />
+      {openEnquiries.length > 0 && (
+        <Card title={<>Website admission enquiries <Badge tone="amber">{openEnquiries.length}</Badge></>} className="mb-5" bodyClass="p-0 overflow-x-auto">
+          <table className="table">
+            <thead><tr><th>Received</th><th>Name</th><th>Contact</th><th>Course</th><th>Message</th><th>Status</th><th /></tr></thead>
+            <tbody>
+              {openEnquiries.map((e) => (
+                <tr key={e.id}>
+                  <td className="whitespace-nowrap">{fmtDate(e.created_at)}<div className="text-[11px] text-muted">{e.source}</div></td>
+                  <td className="font-medium">{e.full_name}<div className="text-[11px] text-muted">{e.city}</div></td>
+                  <td className="text-xs">{e.phone}<div>{e.email}</div></td>
+                  <td>{e.course_code ?? "—"}</td>
+                  <td className="max-w-64 text-xs text-muted">{e.message ?? "—"}</td>
+                  <td><Badge tone={e.status === "new" ? "blue" : "amber"}>{e.status}</Badge></td>
+                  <td className="whitespace-nowrap text-xs">
+                    <Link href={`/students/new?enquiry=${e.id}`} className="font-medium text-brand hover:underline">Admit</Link>
+                    {e.status === "new" && <>{" · "}<form action={setEnquiryStatusAction.bind(null, e.id, "contacted")} className="inline"><button className="hover:text-brand">Contacted</button></form></>}
+                    {" · "}<form action={setEnquiryStatusAction.bind(null, e.id, "closed")} className="inline"><button className="text-muted hover:text-brand">Close</button></form>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
       <Card bodyClass="p-0">
         <form className="flex flex-wrap gap-2 border-b border-line p-3">
           <input name="q" defaultValue={q} placeholder="Search name, enrollment no, email, phone" className="input max-w-xs" />

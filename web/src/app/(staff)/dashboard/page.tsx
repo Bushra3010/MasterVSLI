@@ -1,5 +1,8 @@
 import {
   BadgeCheck,
+  BarChart3,
+  UserCheck,
+  UserX,
   Bell,
   Briefcase,
   CalendarCheck,
@@ -204,6 +207,27 @@ export default async function Dashboard() {
           </div>
           <div className="flex items-center gap-1.5 text-xs text-white/80"><RefreshCw size={13} /> Updated Recently on {fmtDate(today)}</div>
         </div>
+      </div>
+
+      {/* at a glance */}
+      <div className="mb-5 flex flex-wrap items-stretch overflow-hidden rounded-[5px] border border-line bg-white">
+        <div className="flex items-center gap-2 bg-navy px-4 py-3 text-white">
+          <BarChart3 size={22} />
+          <div className="leading-tight"><div className="text-sm font-medium">Admin Dashboard</div><div className="text-[11px] text-white/75">(At a Glance)</div></div>
+        </div>
+        {[
+          { l: "Total Students", v: stats.total, icon: Users, c: "text-brand", href: "/students" },
+          { l: "Active Students", v: stats.active, icon: UserCheck, c: "text-emerald-600", href: "/students?status=active" },
+          { l: "On Hold", v: stats.on_hold, icon: UserX, c: "text-red-500", href: "/students?status=on_hold" },
+          { l: "Expiring This Month", v: stats.expiring_month, icon: Bell, c: "text-amber-500", href: "/validity" },
+          { l: "Pending Fees", v: inr(stats.pending_fees), icon: IndianRupee, c: "text-amber-600", href: "/fees" },
+          { l: "Active Placement Drives", v: stats.open_drives, icon: Briefcase, c: "text-brand", href: "/placements" },
+        ].map((k) => (
+          <Link key={k.l} href={k.href} className="flex min-w-36 flex-1 items-center gap-2 border-l border-line px-4 py-3 hover:bg-slate-50">
+            <k.icon size={24} className={k.c} />
+            <div className="leading-tight"><div className="text-[11px] text-muted">{k.l}</div><div className="text-lg font-medium text-navy tabular-nums">{k.v}</div></div>
+          </Link>
+        ))}
       </div>
 
       {/* four headline cards */}

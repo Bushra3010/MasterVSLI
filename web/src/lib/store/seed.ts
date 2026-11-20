@@ -14,7 +14,10 @@ import type {
   LeaveRequest,
   MessageRow,
   PayrollRow,
+  PaymentRequest,
   ProfileRow,
+  StaffTask,
+  AdmissionEnquiry,
   StaffAttendance,
   Letter,
   Payment,
@@ -62,6 +65,9 @@ export interface DemoTables {
   finance_entries: FinanceEntry[];
   messages: MessageRow[];
   profiles: ProfileRow[];
+  staff_tasks: StaffTask[];
+  payment_requests: PaymentRequest[];
+  admission_enquiries: AdmissionEnquiry[];
 }
 
 const NAMES: [string, string, string][] = [
@@ -385,6 +391,17 @@ export function buildSeed(): DemoTables {
     profiles: [
       { id: "demo-admin", full_name: "Demo Admin", role: "admin", created_at: addDays(today, -200) + "T08:00:00Z" },
       { id: "demo-staff-1", full_name: "sowmya@mastervlsi.example", role: "staff", created_at: addDays(today, -120) + "T08:00:00Z" },
+    ],
+    staff_tasks: [
+      { id: "tk-1", staff_id: "st-1", title: "Evaluate UVM assignment 3 for DV-Online-Jan26", due_date: today, done: false, created_at: addDays(today, -1) + "T08:00:00Z" },
+      { id: "tk-2", staff_id: "st-1", title: "Upload yesterday's class recording", due_date: today, done: true, done_at: today + "T06:00:00Z", created_at: addDays(today, -1) + "T08:00:00Z" },
+      { id: "tk-3", staff_id: "st-2", title: "Share Qualcomm drive with eligible DV students", due_date: addDays(today, 1), done: false, created_at: today + "T04:00:00Z" },
+      { id: "tk-4", staff_id: "st-3", title: "Prepare PD lab: floorplanning exercise", due_date: addDays(today, 2), done: false, created_at: today + "T04:00:00Z" },
+    ],
+    payment_requests: [],
+    admission_enquiries: [
+      { id: "enq-1", full_name: "Karthik Reddy", email: "karthik.r@example.com", phone: "9876501234", course_code: "DV", city: "Hyderabad", message: "Interested in weekend online batch", source: "website", status: "new", student_id: null, created_at: addDays(today, -1) + "T10:30:00Z" },
+      { id: "enq-2", full_name: "Pooja Nair", email: "pooja.n@example.com", phone: "9988776655", course_code: "PD", city: "Kochi", message: "Fee and placement details please", source: "website", status: "contacted", student_id: null, created_at: addDays(today, -3) + "T12:00:00Z" },
     ],
   };
 }

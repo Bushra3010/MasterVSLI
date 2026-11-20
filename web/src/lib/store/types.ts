@@ -28,7 +28,10 @@ export type TableName =
   | "payroll"
   | "finance_entries"
   | "messages"
-  | "profiles";
+  | "profiles"
+  | "staff_tasks"
+  | "payment_requests"
+  | "admission_enquiries";
 
 export interface Query {
   eq?: Record<string, string | number | boolean | null>;

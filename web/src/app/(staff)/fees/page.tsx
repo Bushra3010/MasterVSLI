@@ -1,15 +1,18 @@
 import Link from "next/link";
-import { Card, PageHeader, Stat, StatusBadge } from "@/components/ui";
+import { Badge, Card, PageHeader, Stat, StatusBadge } from "@/components/ui";
 import { fmtDate, inr, todayISO } from "@/lib/format";
 import { getRepo } from "@/lib/server";
 import { recordPaymentAction } from "../actions";
+import { cancelPaymentRequestAction, confirmPaymentRequestAction } from "../module-actions";
 
-export const metadata = { title: "Fees & vendors" };
+export const metadata = { title: "Fees management" };
 
 export default async function FeesPage({ searchParams }: PageProps<"/fees">) {
   const sp = await searchParams;
   const filter = typeof sp.show === "string" ? sp.show : "due";
-  const { vendors, allocations, installments, payments, students } = await (await getRepo()).ledger();
+  const repo = await getRepo();
+  const [{ vendors, allocations, installments, payments, students }, requests] = await Promise.all([repo.ledger(), repo.paymentRequests()]);
+  const openRequests = requests.filter((r) => r.status === "created");
   const student = new Map(students.map((s) => [s.id, s]));
   const vendor = new Map(vendors.map((v) => [v.id, v]));
   const allocVendor = new Map(allocations.map((a) => [a.id, a.vendor_id]));
@@ -45,7 +48,7 @@ export default async function FeesPage({ searchParams }: PageProps<"/fees">) {
 
   return (
     <>
-      <PageHeader title="Fees, vendors & sub-vendors" subtitle="Each student fee is split across vendors; vendor shares are collected in installments via sub-vendors." />
+      <PageHeader title="Fees Management" subtitle="Each student fee is split across vendors; vendor shares are collected in installments via sub-vendors." />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Total billed" value={inr(total)} />
         <Stat label="Collected" value={inr(paid)} tone="green" />
@@ -130,9 +133,42 @@ export default async function FeesPage({ searchParams }: PageProps<"/fees">) {
         </table>
       </Card>
 
+      <Card title={<>Online payment requests <Badge tone="amber">{openRequests.length} awaiting</Badge></>} className="mt-5" bodyClass="p-0 overflow-x-auto">
+        <p className="border-b border-line px-4 py-2 text-xs text-muted">
+          Students pay from their portal. Razorpay payments are confirmed automatically; UPI payments need the UTR from your bank statement.
+        </p>
+        <table className="table">
+          <thead><tr><th>Started</th><th>Student</th><th>Amount</th><th>Method</th><th>Status</th><th>Confirm</th></tr></thead>
+          <tbody>
+            {requests.slice(0, 20).map((r) => (
+              <tr key={r.id}>
+                <td>{fmtDate(r.created_at)}</td>
+                <td>{student.get(r.student_id)?.full_name}</td>
+                <td className="tabular-nums">{inr(r.amount)}</td>
+                <td className="uppercase">{r.provider}</td>
+                <td><Badge tone={r.status === "paid" ? "green" : r.status === "cancelled" ? "slate" : "amber"}>{r.status === "created" ? "awaiting" : r.status}</Badge>{r.paid_reference && <div className="font-mono text-[10px] text-muted">{r.paid_reference}</div>}</td>
+                <td>
+                  {r.status === "created" && r.provider === "upi" && (
+                    <div className="flex items-center gap-1">
+                      <form action={confirmPaymentRequestAction.bind(null, r.id)} className="flex items-center gap-1">
+                        <input name="reference" required minLength={4} placeholder="UTR / txn no." aria-label="UPI transaction reference" className="input w-32 py-1" />
+                        <button className="btn-primary py-1">Confirm</button>
+                      </form>
+                      <form action={cancelPaymentRequestAction.bind(null, r.id)}><button className="text-xs text-muted hover:text-brand">Cancel</button></form>
+                    </div>
+                  )}
+                  {r.status === "created" && r.provider === "razorpay" && <span className="text-xs text-muted">Waiting for Razorpay</span>}
+                </td>
+              </tr>
+            ))}
+            {!requests.length && <tr><td colSpan={6} className="text-center text-muted">No online payments yet.</td></tr>}
+          </tbody>
+        </table>
+      </Card>
+
       <Card title="Recent payments" className="mt-5" bodyClass="p-0 overflow-x-auto">
         <table className="table">
-          <thead><tr><th>Date</th><th>Student</th><th>Amount</th><th>Mode</th><th>Reference</th></tr></thead>
+          <thead><tr><th>Date</th><th>Student</th><th>Amount</th><th>Mode</th><th>Reference</th><th /></tr></thead>
           <tbody>
             {payments.slice(0, 15).map((p) => (
               <tr key={p.id}>
@@ -141,6 +177,7 @@ export default async function FeesPage({ searchParams }: PageProps<"/fees">) {
                 <td className="tabular-nums">{inr(p.amount)}</td>
                 <td>{p.mode}</td>
                 <td className="font-mono text-xs text-muted">{p.reference ?? "—"}</td>
+                <td><Link href={`/fees/receipt/${p.id}`} className="text-xs font-medium text-brand hover:underline">Receipt</Link></td>
               </tr>
             ))}
           </tbody>
