@@ -4,7 +4,8 @@ import { StudentProfileView } from "@/components/student-profile";
 import { PayNow } from "./pay-now";
 import { Badge, Card, StatusBadge } from "@/components/ui";
 import { daysBetween, fmtDate, todayISO } from "@/lib/format";
-import { getStudentReadRepo } from "@/lib/server";
+import Link from "next/link";
+import { getServiceRepo, getStudentReadRepo } from "@/lib/server";
 import { requireStudent } from "@/lib/session";
 
 export const metadata = { title: "My dashboard" };
@@ -13,7 +14,8 @@ export default async function PortalHome({ searchParams }: PageProps<"/portal">)
   const sp = await searchParams;
   const s = await requireStudent();
   const repo = await getStudentReadRepo();
-  const [p, notices] = await Promise.all([repo.profile(s.studentId), repo.studentNotifications(s.studentId)]);
+  const svc = getServiceRepo();
+  const [p, notices, general, placement] = await Promise.all([repo.profile(s.studentId), repo.studentNotifications(s.studentId), svc.consentFor(s.studentId, "general"), svc.consentFor(s.studentId, "placement")]);
   if (!p) return <p>Profile not found.</p>;
   const st = p.student;
   const left = st.validity_end ? daysBetween(todayISO(), st.validity_end) : null;
@@ -28,6 +30,16 @@ export default async function PortalHome({ searchParams }: PageProps<"/portal">)
           {left !== null && <Badge tone={left <= 30 ? "amber" : "slate"}>Access valid till {fmtDate(st.validity_end)}</Badge>}
         </div>
       </div>
+      {general.required && (
+        <Link href="/portal/terms" className="mb-5 flex items-center justify-between gap-3 rounded-[5px] border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+          <span><b>Action needed:</b> please read and accept the MasterVLSI Terms &amp; Conditions.</span><span className="btn-primary">Review &amp; accept</span>
+        </Link>
+      )}
+      {placement.required && (
+        <Link href="/portal/agreement" className="mb-5 flex items-center justify-between gap-3 rounded-[5px] border border-orange-200 bg-orange-50 p-4 text-sm text-orange-900">
+          <span>Your <b>Placement Profile is not active</b>. Accept the placement terms to apply for company drives and join the placement group.</span><span className="btn bg-orange-500 text-white">Activate</span>
+        </Link>
+      )}
       {st.status !== "active" && (
         <div className="mb-5 flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
           <AlertTriangle className="shrink-0" size={18} />

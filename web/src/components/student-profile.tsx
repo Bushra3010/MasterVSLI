@@ -114,6 +114,7 @@ export function StudentProfileView({
 
       <Card title="Course & admission" icon={<GraduationCap size={15} />}>
         <dl>
+          <Field label="Category" value={s.category === "college" ? "College student (via TPO)" : s.category === "corporate" ? "Corporate student" : "Normal student (retail)"} />
           <Field label="Course" value={p.course?.name} />
           <Field label="Batch" value={p.batch?.name} />
           <Field label="Training mode" value={titleCase(s.training_mode)} />

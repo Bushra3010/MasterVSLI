@@ -2,6 +2,9 @@ import Link from "next/link";
 import { Badge, Card, PageHeader, Stat, StatusBadge } from "@/components/ui";
 import { fmtDate, inr, todayISO } from "@/lib/format";
 import { getRepo } from "@/lib/server";
+import { getSession, isSuperAdmin } from "@/lib/session";
+import { feeDues } from "@/lib/reminders";
+import { ReminderForm } from "./reminder-form";
 import { recordPaymentAction } from "../actions";
 import { cancelPaymentRequestAction, confirmPaymentRequestAction } from "../module-actions";
 
@@ -10,8 +13,10 @@ export const metadata = { title: "Fees management" };
 export default async function FeesPage({ searchParams }: PageProps<"/fees">) {
   const sp = await searchParams;
   const filter = typeof sp.show === "string" ? sp.show : "due";
+  const superAdmin = isSuperAdmin(await getSession());
+  const account = sp.account === "kacha" && superAdmin ? "kacha" : "paka";
   const repo = await getRepo();
-  const [{ vendors, allocations, installments, payments, students }, requests] = await Promise.all([repo.ledger(), repo.paymentRequests()]);
+  const [{ vendors, allocations, installments, payments, students }, requests, dues] = await Promise.all([repo.ledger(account), repo.paymentRequests(), feeDues(repo, "all")]);
   const openRequests = requests.filter((r) => r.status === "created");
   const student = new Map(students.map((s) => [s.id, s]));
   const vendor = new Map(vendors.map((v) => [v.id, v]));
@@ -49,6 +54,11 @@ export default async function FeesPage({ searchParams }: PageProps<"/fees">) {
   return (
     <>
       <PageHeader title="Fees Management" subtitle="Each student fee is split across vendors; vendor shares are collected in installments via sub-vendors." />
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <Link href="/fees?account=paka" className={`btn border ${account === "paka" ? "border-emerald-600 bg-emerald-600 text-white" : "border-line bg-white"}`}>🏛 Paka (Institute account)</Link>
+        {superAdmin && <Link href="/fees?account=kacha" className={`btn border ${account === "kacha" ? "border-orange-500 bg-orange-500 text-white" : "border-orange-200 bg-orange-50 text-orange-800"}`}>🔒 Kacha (Other accounts)</Link>}
+        <span className="text-xs text-muted">{account === "kacha" ? "Vendor / sub-vendor / partner accounts: visible only to super admins." : superAdmin ? "Official MasterVLSI account (GST invoice / official receipt)." : "Official MasterVLSI account."}</span>
+      </div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Total billed" value={inr(total)} />
         <Stat label="Collected" value={inr(paid)} tone="green" />
@@ -93,7 +103,7 @@ export default async function FeesPage({ searchParams }: PageProps<"/fees">) {
         actions={
           <div className="flex gap-1 text-xs">
             {["due", "overdue", "all"].map((f) => (
-              <Link key={f} href={`/fees?show=${f}`} className={`rounded px-2 py-0.5 capitalize ${filter === f ? "bg-brand text-white" : "text-muted hover:text-brand"}`}>{f}</Link>
+              <Link key={f} href={`/fees?show=${f}&account=${account}`} className={`rounded px-2 py-0.5 capitalize ${filter === f ? "bg-brand text-white" : "text-muted hover:text-brand"}`}>{f}</Link>
             ))}
           </div>
         }
@@ -132,6 +142,30 @@ export default async function FeesPage({ searchParams }: PageProps<"/fees">) {
           </tbody>
         </table>
       </Card>
+
+      <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <Card title={<>Fee reminders <Badge tone="red">{dues.filter((d) => d.overdue).length} overdue</Badge> <Badge tone="amber">{dues.filter((d) => !d.overdue).length} due soon</Badge></>} bodyClass="p-0 overflow-x-auto">
+          <table className="table">
+            <thead><tr><th>Student</th><th>Amount</th><th>Due</th><th>Status</th><th>Remind</th></tr></thead>
+            <tbody>
+              {dues.slice(0, 15).map((d) => (
+                <tr key={d.student.id}>
+                  <td><Link href={`/students/${d.student.id}`} className="font-medium hover:text-brand">{d.student.full_name}</Link><div className="text-[11px] text-muted">{d.student.phone}</div></td>
+                  <td className="tabular-nums">{inr(d.amount)}</td>
+                  <td>{fmtDate(d.due)}</td>
+                  <td><Badge tone={d.overdue ? "red" : "amber"}>{d.overdue ? "overdue" : "due soon"}</Badge></td>
+                  <td><ReminderForm studentId={d.student.id} compact /></td>
+                </tr>
+              ))}
+              {!dues.length && <tr><td colSpan={5} className="text-center text-muted">No overdue or upcoming installments.</td></tr>}
+            </tbody>
+          </table>
+        </Card>
+        <Card title="Bulk reminder">
+          <ReminderForm />
+          <p className="mt-2 text-[11px] text-muted">Reminders also go out automatically every morning (due in 3 days and overdue) when WhatsApp, SMS or email is set up in Settings.</p>
+        </Card>
+      </div>
 
       <Card title={<>Online payment requests <Badge tone="amber">{openRequests.length} awaiting</Badge></>} className="mt-5" bodyClass="p-0 overflow-x-auto">
         <p className="border-b border-line px-4 py-2 text-xs text-muted">

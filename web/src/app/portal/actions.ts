@@ -15,6 +15,9 @@ export async function respondAction(driveId: string, response: DriveResponseValu
   if (!profile || profile.student.status !== "active" || !placement?.enabled) {
     throw new Error("Placement access is blocked for your account. Please contact the admin.");
   }
+  // Placement profile is active only after the student accepts the placement terms.
+  const { required } = await getServiceRepo().consentFor(s.studentId, "placement");
+  if (required) throw new Error("Accept the Placement Terms & Conditions to activate your placement profile.");
   const drive = (await repo.drives()).find((d) => d.id === driveId);
   if (!drive || drive.status !== "open") throw new Error("This drive is not accepting responses.");
   await repo.respond(driveId, s.studentId, response);
@@ -92,4 +95,47 @@ export async function payOnlineAction(installmentId: string): Promise<PayResult>
     return { ok: true, kind: "upi", link, qr, amount };
   }
   return { ok: false, message: "Online payment isn't set up yet. Please pay at the office." };
+}
+
+// ---- brand ambassador (student submits; staff approve) ------------------------------------------
+export async function submitAmbassadorAction(_: unknown, form: FormData): Promise<{ ok: boolean; message: string }> {
+  const s = await requireStudent();
+  const kind = String(form.get("kind") || "");
+  const details = String(form.get("details") || "").trim();
+  const proof = String(form.get("proof_url") || "").trim();
+  if (!["referral", "review", "social", "mentor"].includes(kind)) return { ok: false, message: "Pick an activity." };
+  if (details.length < 3) return { ok: false, message: "Add a few details (e.g. friend's name and phone, or the review link)." };
+  if (proof && !/^https?:\/\//.test(proof)) return { ok: false, message: "Proof link must start with http(s)://" };
+  const repo = getServiceRepo();
+  const { getServiceStore } = await import("@/lib/session");
+  await getServiceStore().insert("ambassador_activities", [{ student_id: s.studentId, kind, details: details.slice(0, 500), proof_url: proof || null, reward_amount: 0, status: "pending", created_at: new Date().toISOString() }]);
+  // A referral also becomes a lead in the admissions pipeline.
+  if (kind === "referral") {
+    const phone = details.match(/\+?\d[\d\s-]{8,}\d/)?.[0]?.replace(/\D/g, "") ?? null;
+    await repo.createLead({ full_name: details.replace(/\+?\d[\d\s-]{8,}\d/, "").replace(/[,–-]+\s*$/, "").trim().slice(0, 80) || "Referral", phone, source: "Referral", referred_by_student: s.studentId, remarks: `Referred by student (portal): ${details}` });
+  }
+  revalidatePath("/portal/earn");
+  return { ok: true, message: "Submitted! The team will verify it and credit your reward." };
+}
+
+// ---- terms & placement agreement --------------------------------------------------------------------
+export async function acceptTermsAction(kind: "general" | "placement", form: FormData) {
+  const s = await requireStudent();
+  const repo = getServiceRepo();
+  const { terms } = await repo.consentFor(s.studentId, kind);
+  if (!terms) return;
+  const all = terms.items.every((_, i) => form.get(`t_${i}`) === "on") && form.get("final") === "on";
+  if (!all) throw new Error("Please tick every declaration to continue.");
+  const { headers } = await import("next/headers");
+  await repo.acceptTerms(s.studentId, kind, (await headers()).get("user-agent"));
+  revalidatePath("/portal", "layout");
+}
+
+export async function requestPlacementGroupAction() {
+  const s = await requireStudent();
+  const repo = getServiceRepo();
+  const { required } = await repo.consentFor(s.studentId, "placement");
+  if (required) throw new Error("Accept the placement terms first.");
+  await repo.updateStudent(s.studentId, { placement_group: "requested" });
+  revalidatePath("/portal", "layout");
 }

@@ -1,4 +1,6 @@
-export type Role = "admin" | "staff" | "student";
+export * from "./types-crm";
+import type { Company, FeeAccount, StudentCategory } from "./types-crm";
+export type Role = "super_admin" | "admin" | "staff" | "student";
 export type StudentStatus = "active" | "on_hold" | "expired" | "completed" | "dropped";
 export type TrainingMode = "online" | "offline" | "hybrid";
 export type Channel = "zoom" | "teamviewer" | "biometric" | "placement" | "portal";
@@ -90,6 +92,11 @@ export interface Student {
   lead_source?: string | null;
   placement_consent: boolean;
   placement_eligible: boolean;
+  category?: StudentCategory;
+  branch_id?: string | null;
+  college_id?: string | null;
+  client_id?: string | null;
+  placement_group?: "none" | "requested" | "added";
   created_at?: string;
 }
 
@@ -156,6 +163,7 @@ export interface Allocation {
   student_id: string;
   vendor_id: string;
   amount: number;
+  account?: FeeAccount;
 }
 export interface Installment {
   id: string;
@@ -202,6 +210,9 @@ export interface DriveResponse {
 export interface Staff {
   id: string;
   user_id?: string | null;
+  company?: Company;
+  branch_id?: string | null;
+  source_student_id?: string | null;
   employee_code: string;
   full_name: string;
   designation?: string | null;
@@ -307,7 +318,11 @@ export interface NewStudentInput {
   referred_by?: string;
   city?: string;
   state?: string;
-  allocations: { vendor_id: string; amount: number; sub_vendor_id?: string; installments: number }[];
+  allocations: { vendor_id: string; amount: number; sub_vendor_id?: string; installments: number; account?: FeeAccount }[];
+  category?: StudentCategory;
+  branch_id?: string;
+  college_id?: string;
+  client_id?: string;
 }
 
 export interface NewDriveInput {
@@ -383,11 +398,12 @@ export interface FinanceEntry {
   vendor_id?: string | null;
   reference?: string | null;
   note?: string | null;
+  company?: Company;
   created_at?: string;
 }
 export interface MessageRow {
   id: string;
-  channel: "email" | "whatsapp";
+  channel: "email" | "whatsapp" | "sms";
   audience: string;
   subject?: string | null;
   body: string;

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Badge, Card, PageHeader, Progress, StatusBadge } from "@/components/ui";
 import { inr } from "@/lib/format";
 import { getRepo } from "@/lib/server";
-import type { StudentStatus } from "@/lib/types";
+import type { Branch, Client, College, StudentStatus } from "@/lib/types";
 import { fmtDate } from "@/lib/format";
 import { setEnquiryStatusAction } from "../module-actions";
 
@@ -16,7 +16,14 @@ export default async function StudentsPage({ searchParams }: PageProps<"/student
   const status = (typeof sp.status === "string" ? sp.status : "all") as StudentStatus | "all";
   const batch = typeof sp.batch === "string" ? sp.batch : "";
   const repo = await getRepo();
-  const [students, batches, enquiries] = await Promise.all([repo.students({ q, status, batch: batch || undefined }), repo.batches(), repo.enquiries()]);
+  const category = typeof sp.category === "string" ? sp.category : "";
+  const branch = typeof sp.branch === "string" ? sp.branch : "";
+  const [all, batches, enquiries, branches, colleges, clients] = await Promise.all([
+    repo.students({ q, status, batch: batch || undefined }), repo.batches(), repo.enquiries(),
+    repo.list<Branch>("branches"), repo.list<College>("colleges"), repo.list<Client>("clients"),
+  ]);
+  const students = all.filter((s) => (!category || (s.category ?? "normal") === category) && (!branch || s.branch_id === branch));
+  const orgName = new Map([...colleges.map((c) => [c.id, c.name] as const), ...clients.map((c) => [c.id, c.name] as const)]);
   const openEnquiries = enquiries.filter((e) => e.status === "new" || e.status === "contacted");
 
   return (
@@ -24,7 +31,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/student
       <PageHeader
         title="Students"
         subtitle={`${students.length} students`}
-        actions={<><Link href="/apply" target="_blank" className="btn-soft">Public admission form ↗</Link><Link href="/students/new" className="btn-primary">+ New admission</Link></>}
+        actions={<><Link href="/leads" className="btn-soft">Lead pipeline</Link><Link href="/apply" target="_blank" className="btn-ghost">Public admission form ↗</Link><Link href="/students/new" className="btn-primary">+ New admission</Link></>}
       />
       {openEnquiries.length > 0 && (
         <Card title={<>Website admission enquiries <Badge tone="amber">{openEnquiries.length}</Badge></>} className="mb-5" bodyClass="p-0 overflow-x-auto">
@@ -62,6 +69,12 @@ export default async function StudentsPage({ searchParams }: PageProps<"/student
             <option value="">All batches</option>
             {batches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
+          <select name="category" defaultValue={category} aria-label="Category" className="input w-auto">
+            <option value="">All categories</option><option value="normal">Normal (retail)</option><option value="college">College / TPO</option><option value="corporate">Corporate</option>
+          </select>
+          <select name="branch" defaultValue={branch} aria-label="Branch" className="input w-auto">
+            <option value="">All branches</option>{branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
           <button className="btn-navy">Filter</button>
         </form>
         <div className="overflow-x-auto">
@@ -83,6 +96,10 @@ export default async function StudentsPage({ searchParams }: PageProps<"/student
                   <td>
                     <Link href={`/students/${s.id}`} className="font-medium text-navy hover:text-brand">{s.full_name}</Link>
                     <div className="text-xs text-muted">{s.enrollment_no} · {s.phone}</div>
+                    <div className="mt-0.5 flex flex-wrap gap-1">
+                      <Badge tone={s.category === "college" ? "blue" : s.category === "corporate" ? "green" : "amber"}>{s.category === "college" ? "College" : s.category === "corporate" ? "Corporate" : "Normal"}</Badge>
+                      {(s.college_id || s.client_id) && <span className="text-[11px] text-muted">{orgName.get(s.college_id ?? s.client_id ?? "")}</span>}
+                    </div>
                   </td>
                   <td>
                     <div className="max-w-56 truncate">{s.course_name}</div>

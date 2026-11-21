@@ -4,6 +4,8 @@ import { Badge, Card, PageHeader, Stat, StatusBadge } from "@/components/ui";
 import { fmtDate } from "@/lib/format";
 import { SHEET_COLUMNS } from "@/lib/integrations/google-sheets";
 import { getRepo } from "@/lib/server";
+import type { Consent } from "@/lib/types";
+import { setPlacementGroupAction } from "../crm-actions";
 import { createDriveAction, recordResponseAction, setDriveStatusAction, setStageAction } from "../actions";
 import { SyncButton } from "./sync-button";
 
@@ -14,7 +16,10 @@ const STAGES = ["Applied", "Shortlisted", "Interview", "Offered", "Rejected", "J
 export default async function PlacementsPage({ searchParams }: PageProps<"/placements">) {
   const sp = await searchParams;
   const repo = await getRepo();
-  const [drives, responses, students] = await Promise.all([repo.drives(), repo.responses(), repo.students()]);
+  const [drives, responses, students, consents, placementTerms] = await Promise.all([repo.drives(), repo.responses(), repo.students(), repo.list<Consent>("consents", { eq: { kind: "placement" } }), repo.activeTerms("placement")]);
+  const agreed = new Set(consents.filter((c) => c.version === placementTerms?.version).map((c) => c.student_id));
+  const activeStudents = students.filter((s) => s.status === "active");
+  const groupQueue = students.filter((s) => s.placement_group === "requested");
   const selected = drives.find((d) => d.id === sp.drive) ?? drives.find((d) => d.status === "open") ?? drives[0];
   const student = new Map(students.map((s) => [s.id, s]));
   const rs = responses.filter((r) => r.drive_id === selected?.id);
@@ -159,6 +164,34 @@ export default async function PlacementsPage({ searchParams }: PageProps<"/place
             </div>
           </Card>
         </div>
+      </div>
+      <div className="mt-5 grid gap-5 xl:grid-cols-2">
+        <Card title={`Placement agreement status (${activeStudents.filter((s) => agreed.has(s.id)).length} / ${activeStudents.length} active students)`} bodyClass="p-0 overflow-x-auto max-h-96">
+          <table className="table">
+            <thead><tr><th>Student</th><th>Placement profile</th><th>Group</th></tr></thead>
+            <tbody>
+              {activeStudents.map((s) => (
+                <tr key={s.id}>
+                  <td><Link href={`/students/${s.id}`} className="font-medium hover:text-brand">{s.full_name}</Link></td>
+                  <td>{agreed.has(s.id) || !placementTerms ? <span className="text-xs text-emerald-700">Active (terms accepted)</span> : <span className="text-xs text-red-600">Not active – terms pending</span>}</td>
+                  <td className="text-xs capitalize">{s.placement_group ?? "none"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+        <Card title={`WhatsApp Placement Group – add requests (${groupQueue.length})`}>
+          <p className="mb-2 text-xs text-muted">Students who accepted the placement terms and pressed “Join Placement Group”. Add their number to the group (the link is never shown to students), then mark them added.</p>
+          <ul className="space-y-2">
+            {groupQueue.map((s) => (
+              <li key={s.id} className="flex items-center justify-between gap-2 rounded-[5px] border border-line px-3 py-2 text-[13px]">
+                <span><b className="font-medium text-navy">{s.full_name}</b> · {s.phone ?? "no phone"}</span>
+                <form action={setPlacementGroupAction.bind(null, s.id, "added")}><button className="btn-primary py-1 text-xs">Mark added</button></form>
+              </li>
+            ))}
+            {!groupQueue.length && <li className="text-sm text-muted">No pending requests.</li>}
+          </ul>
+        </Card>
       </div>
     </>
   );

@@ -1,6 +1,7 @@
 import "server-only";
 import { addDays, addMonths, daysBetween, todayISO } from "./format";
 import type { Store } from "./store/types";
+import { createCrmRepo } from "./repo-crm";
 import type {
   AccessEvent,
   AccessRow,
@@ -68,6 +69,7 @@ export function createRepo(db: Store) {
 
   const repo = {
     mode: db.kind,
+    ...createCrmRepo(db),
 
     courses: () => db.select<Course>("courses", { order: { column: "code" } }),
     batches: () => db.select<Batch>("batches", { order: { column: "name" } }),
@@ -131,10 +133,10 @@ export function createRepo(db: Store) {
       };
     },
 
-    async profile(id: string): Promise<StudentProfile | null> {
+    async profile(id: string, opts: { kacha?: boolean } = {}): Promise<StudentProfile | null> {
       const [student] = await db.select<Student>("students", { eq: { id } });
       if (!student) return null;
-      const [courses, batches, vendors, education, access, events, allocations, installments, payments, responses, drives, letters, documents, att, allAtt] =
+      const [courses, batches, vendors, education, access, events, allocationsAll, installmentsAll, paymentsAll, responses, drives, letters, documents, att, allAtt] =
         await Promise.all([
           repo.courses(),
           repo.batches(),
@@ -152,9 +154,18 @@ export function createRepo(db: Store) {
           db.select<AttendanceRecord>("attendance_records", { eq: { student_id: id }, order: { column: "session_date", ascending: false } }),
           recentAttendance(),
         ]);
+      let allocations = allocationsAll, installments = installmentsAll, payments = paymentsAll;
       const bySource = emptySources();
       for (const r of att) bySource[r.source]++;
+      if (!opts.kacha) {
+        const hidden = new Set(allocationsAll.filter((a) => a.account === "kacha").map((a) => a.id));
+        allocations = allocationsAll.filter((a) => !hidden.has(a.id));
+        installments = installmentsAll.filter((i) => !hidden.has(i.allocation_id));
+        const keepInst = new Set(installments.map((i) => i.id));
+        payments = paymentsAll.filter((p) => keepInst.has(p.installment_id));
+      }
       const paid = installments.reduce((a, i) => a + Number(i.paid_amount), 0);
+      const visibleTotal = allocations.length && allocations.length < allocationsAll.length ? allocations.reduce((a, x) => a + Number(x.amount), 0) : Number(student.total_fee);
       return {
         student,
         course: courses.find((c) => c.id === student.course_id),
@@ -172,9 +183,9 @@ export function createRepo(db: Store) {
         documents,
         attendance: { pct: attendancePct(allAtt)(id), bySource, recent: att.slice(0, 15) },
         fee: {
-          total: Number(student.total_fee),
+          total: visibleTotal,
           paid,
-          balance: Number(student.total_fee) - paid,
+          balance: visibleTotal - paid,
           next_due: installments.find((i) => i.status !== "paid")?.due_date ?? null,
         },
       };
@@ -209,10 +220,14 @@ export function createRepo(db: Store) {
           professional: {},
           placement_consent: true,
           placement_eligible: false,
+          category: input.category ?? "normal",
+          branch_id: input.branch_id || null,
+          college_id: input.college_id || null,
+          client_id: input.client_id || null,
         },
       ]);
       for (const a of input.allocations.filter((x) => x.amount > 0)) {
-        const [alloc] = await db.insert<Allocation>("fee_allocations", [{ student_id: student.id, vendor_id: a.vendor_id, amount: a.amount }]);
+        const [alloc] = await db.insert<Allocation>("fee_allocations", [{ student_id: student.id, vendor_id: a.vendor_id, amount: a.amount, account: a.account ?? "paka" }]);
         const n = Math.max(1, a.installments);
         const per = Math.round(a.amount / n);
         await db.insert<Installment>(
@@ -291,14 +306,21 @@ export function createRepo(db: Store) {
       }
     },
 
-    async ledger() {
-      const [vendors, allocations, installments, payments, students] = await Promise.all([
+    /** Fee ledger. account "paka" (default) hides Kacha rows; "kacha" returns only Kacha; "all" both. */
+    async ledger(account: "paka" | "kacha" | "all" = "paka") {
+      const [vendors, allAllocations, allInstallments, allPayments, students] = await Promise.all([
         repo.vendors(),
         db.select<Allocation>("fee_allocations"),
         db.select<Installment>("installments", { order: { column: "due_date" } }),
         db.select<Payment>("payments", { order: { column: "paid_at", ascending: false } }),
         db.select<Student>("students"),
       ]);
+      const keep = (a?: Allocation) => account === "all" || (a?.account ?? "paka") === account;
+      const allocations = allAllocations.filter(keep);
+      const ids = new Set(allocations.map((a) => a.id));
+      const installments = allInstallments.filter((i) => ids.has(i.allocation_id));
+      const instIds = new Set(installments.map((i) => i.id));
+      const payments = allPayments.filter((p) => instIds.has(p.installment_id));
       return { vendors, allocations, installments, payments, students };
     },
 

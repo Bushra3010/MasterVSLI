@@ -26,14 +26,30 @@ export default async function HrPage({ searchParams }: PageProps<"/hr">) {
   const days = Array.from({ length: 14 }, (_, k) => addDays(today, -13 + k));
 
   const repo = await getRepo();
-  const [tasks, staff, att, leaves, payroll] = await Promise.all([repo.tasks(), repo.staff(), repo.staffAttendance(days[0] < date ? days[0] : date, today > date ? today : date), repo.leaveRequests(), repo.payroll(month)]);
+  const company = sp.company === "enrich" ? "enrich" : "mastervlsi";
+  const [tasksAll, staffAll, att, leavesAll, payrollAll] = await Promise.all([repo.tasks(), repo.staff(), repo.staffAttendance(days[0] < date ? days[0] : date, today > date ? today : date), repo.leaveRequests(), repo.payroll(month)]);
+  const staff = staffAll.filter((x) => (x.company ?? "mastervlsi") === company);
+  const ids = new Set(staff.map((x) => x.id));
+  const tasks = tasksAll.filter((t) => ids.has(t.staff_id));
+  const leaves = leavesAll.filter((l) => ids.has(l.staff_id));
+  const payroll = payrollAll.filter((p) => ids.has(p.staff_id));
   const name = new Map(staff.map((s) => [s.id, s.full_name]));
   const mark = (staffId: string, d: string) => att.find((a) => a.staff_id === staffId && a.att_date === d)?.status;
   const todayMarks = staff.map((s) => mark(s.id, today));
 
   return (
     <>
-      <PageHeader title="Staff & HR" subtitle="Staff records, daily staff attendance, leave requests and monthly payroll." />
+      <PageHeader
+        title="Staff & HR"
+        subtitle="Staff records, daily staff attendance, leave requests and monthly payroll — kept separately for each company."
+        actions={
+          <div className="flex gap-1 text-xs">
+            {([["mastervlsi", "MasterVLSI"], ["enrich", "Enrich Silicon"]] as const).map(([k, l]) => (
+              <a key={k} href={`/hr?company=${k}`} className={`rounded-[5px] border px-3 py-1.5 ${company === k ? "border-brand bg-brand text-white" : "border-line bg-white"}`}>{l}</a>
+            ))}
+          </div>
+        }
+      />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Staff" value={staff.length} />
         <Stat label="Present today" value={todayMarks.filter((m) => m === "present" || m === "half_day").length} tone="green" hint={`${todayMarks.filter((m) => !m).length} not marked`} />
@@ -153,6 +169,7 @@ export default async function HrPage({ searchParams }: PageProps<"/hr">) {
         bodyClass="p-0 overflow-x-auto"
         actions={
           <form action={generatePayrollAction} className="flex items-center gap-1">
+            <input type="hidden" name="company" value={company} />
             <input type="month" name="month" defaultValue={month} aria-label="Payroll month" className="input w-auto py-1 text-xs" />
             <button className="btn-primary py-1 text-xs">Generate</button>
           </form>
@@ -198,6 +215,7 @@ export default async function HrPage({ searchParams }: PageProps<"/hr">) {
           </Row>
         ))}
         <Row action={saveStaffAction}>
+          <input type="hidden" name="company" value={company} />
           <I name="employee_code" w="w-24" required placeholder="Emp. code" />
           <I name="full_name" w="min-w-36 flex-1" required placeholder="Full name" />
           <I name="designation" w="w-40" placeholder="Designation" />

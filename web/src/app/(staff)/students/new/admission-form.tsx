@@ -3,12 +3,19 @@
 import { useMemo, useState } from "react";
 import { Card } from "@/components/ui";
 import { inr, todayISO } from "@/lib/format";
-import type { Batch, Course, Vendor } from "@/lib/types";
+import type {
+  Branch,
+  Client,
+  College, Batch, Course, Vendor } from "@/lib/types";
 import { createStudentAction } from "../../actions";
 
-export type AdmissionDefaults = { enquiry_id?: string; full_name?: string; email?: string; phone?: string; city?: string; course_code?: string };
+export type AdmissionDefaults = { enquiry_id?: string; lead_id?: string; source?: string; full_name?: string; email?: string; phone?: string; city?: string; course_code?: string };
 
-export function AdmissionForm({ courses, batches, vendors, defaults = {} }: { courses: Course[]; batches: Batch[]; vendors: Vendor[]; defaults?: AdmissionDefaults }) {
+export function AdmissionForm({ courses, batches, vendors, defaults = {}, branches = [], colleges = [], clients = [], kacha = false }: {
+  courses: Course[]; batches: Batch[]; vendors: Vendor[]; defaults?: AdmissionDefaults;
+  branches?: Branch[]; colleges?: College[]; clients?: Client[]; kacha?: boolean;
+}) {
+  const [category, setCategory] = useState<"normal" | "college" | "corporate">("normal");
   const [courseId, setCourseId] = useState(courses.find((c) => c.code === defaults.course_code)?.id ?? courses[0]?.id ?? "");
   const course = courses.find((c) => c.id === courseId);
   const [fee, setFee] = useState(course?.fee ?? 0);
@@ -29,6 +36,39 @@ export function AdmissionForm({ courses, batches, vendors, defaults = {} }: { co
   return (
     <form action={createStudentAction} className="grid gap-5 xl:grid-cols-2">
       {defaults.enquiry_id && <input type="hidden" name="enquiry_id" value={defaults.enquiry_id} />}
+      {defaults.lead_id && <input type="hidden" name="lead_id" value={defaults.lead_id} />}
+      <Card title="Student category *" className="xl:col-span-2">
+        <div className="grid gap-3 sm:grid-cols-3">
+          {([["normal", "Normal student", "Retail / individual: direct admission, individual fee, regular batches"], ["college", "College student", "Through college / TPO: MoU & campus drives, batch-wise training"], ["corporate", "Corporate student", "Company-sponsored training: corporate batch, company-wise billing"]] as const).map(([k, t, d]) => (
+            <label key={k} className={`cursor-pointer rounded-[5px] border p-3 ${category === k ? "border-brand bg-brand-soft" : "border-line"}`}>
+              <input type="radio" name="category" value={k} checked={category === k} onChange={() => setCategory(k)} className="mr-2" />
+              <span className="font-medium text-navy">{t}</span>
+              <div className="mt-1 text-xs text-muted">{d}</div>
+            </label>
+          ))}
+        </div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          <div>
+            <label className="label">Branch / domain</label>
+            <select name="branch_id" className="input" defaultValue={branches[0]?.id ?? ""}>
+              <option value="">—</option>
+              {branches.filter((b) => b.company === "mastervlsi").map((b) => <option key={b.id} value={b.id}>{b.name}{b.domain ? ` · ${b.domain}` : ""}</option>)}
+            </select>
+          </div>
+          {category === "college" && (
+            <div>
+              <label className="label">College *</label>
+              <select name="college_id" required className="input"><option value="">Pick college</option>{colleges.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+            </div>
+          )}
+          {category === "corporate" && (
+            <div>
+              <label className="label">Company (sponsor) *</label>
+              <select name="client_id" required className="input"><option value="">Pick company</option>{clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+            </div>
+          )}
+        </div>
+      </Card>
       <Card title="Personal & contact">
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2">
@@ -46,8 +86,8 @@ export function AdmissionForm({ courses, batches, vendors, defaults = {} }: { co
           <div><label className="label">State</label><input name="state" className="input" /></div>
           <div>
             <label className="label">Lead source</label>
-            <select name="lead_source" defaultValue={defaults.enquiry_id ? "Website" : undefined} className="input">
-              {["Website", "Google", "Instagram", "LinkedIn", "Referral", "Walk-in"].map((s) => <option key={s}>{s}</option>)}
+            <select name="lead_source" defaultValue={defaults.source ?? undefined} className="input">
+              {[...new Set([...(defaults.source ? [defaults.source] : []), "Website", "WhatsApp", "Google", "Instagram", "LinkedIn", "Referral", "Walk-in", "College / TPO"])].map((s) => <option key={s}>{s}</option>)}
             </select>
           </div>
           <div><label className="label">Referred by</label><input name="referred_by" className="input" /></div>
@@ -91,7 +131,7 @@ export function AdmissionForm({ courses, batches, vendors, defaults = {} }: { co
       <Card title="Fee split — vendors, sub-vendors & installments" className="xl:col-span-2">
         <div className="space-y-3">
           {alloc.map((a, i) => (
-            <div key={i} className="grid gap-3 rounded-lg border border-line p-3 sm:grid-cols-4">
+            <div key={i} className={`grid gap-3 rounded-lg border border-line p-3 ${kacha ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
               <div>
                 <label className="label">Vendor {i + 1}</label>
                 <select name={`alloc_vendor_${i}`} value={a.vendor} onChange={(e) => setAlloc((s) => s.map((x, k) => (k === i ? { ...x, vendor: e.target.value, sub: "" } : x)))} className="input">
@@ -109,6 +149,15 @@ export function AdmissionForm({ courses, batches, vendors, defaults = {} }: { co
                 <label className="label">Allocation (₹)</label>
                 <input name={`alloc_amount_${i}`} type="number" value={a.amount} onChange={(e) => setAlloc((s) => s.map((x, k) => (k === i ? { ...x, amount: Number(e.target.value) } : x)))} className="input" />
               </div>
+              {kacha && (
+                <div>
+                  <label className="label">Account</label>
+                  <select name={`alloc_account_${i}`} defaultValue="paka" className="input">
+                    <option value="paka">Paka (institute)</option>
+                    <option value="kacha">Kacha (other)</option>
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="label">Installments</label>
                 <input name={`alloc_n_${i}`} type="number" min={1} max={12} value={a.n} onChange={(e) => setAlloc((s) => s.map((x, k) => (k === i ? { ...x, n: Number(e.target.value) } : x)))} className="input" />

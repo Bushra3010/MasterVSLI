@@ -11,13 +11,15 @@ import type { Channel, DriveStatus, LetterTemplate, StudentStatus } from "@/lib/
 const money = z.coerce.number().min(0);
 
 export async function createStudentAction(form: FormData) {
-  await requireStaff();
+  const me = await requireStaff();
   const allocations = [0, 1, 2]
     .map((i) => ({
       vendor_id: String(form.get(`alloc_vendor_${i}`) || ""),
       sub_vendor_id: String(form.get(`alloc_sub_${i}`) || "") || undefined,
       amount: Number(form.get(`alloc_amount_${i}`) || 0),
       installments: Number(form.get(`alloc_n_${i}`) || 1),
+      // Only a super admin may route money to a Kacha (other) account.
+      account: (form.get(`alloc_account_${i}`) === "kacha" && me.role === "super_admin" ? "kacha" : "paka") as "paka" | "kacha",
     }))
     .filter((a) => a.vendor_id && a.amount > 0);
 
@@ -37,13 +39,25 @@ export async function createStudentAction(form: FormData) {
       referred_by: z.string().optional(),
       city: z.string().optional(),
       state: z.string().optional(),
+      category: z.enum(["normal", "college", "corporate"]),
+      branch_id: z.string().optional(),
+      college_id: z.string().optional(),
+      client_id: z.string().optional(),
     })
     .parse(Object.fromEntries(form));
+  if (input.category === "college" && !input.college_id) throw new Error("Pick the college for a college student");
+  if (input.category === "corporate" && !input.client_id) throw new Error("Pick the company for a corporate student");
 
   const repo = await getRepo();
   const s = await repo.createStudent({ ...input, allocations });
   const enquiryId = String(form.get("enquiry_id") || "");
   if (enquiryId) await repo.setEnquiry(enquiryId, { status: "admitted", student_id: s.id });
+  const leadId = String(form.get("lead_id") || "");
+  if (leadId) {
+    await repo.moveLead(leadId, "enrolled");
+    const { getStore } = await import("@/lib/session");
+    await (await getStore()).update("leads", { id: leadId }, { student_id: s.id });
+  }
   revalidatePath("/students");
   redirect(`/students/${s.id}`);
 }
@@ -269,7 +283,8 @@ export async function saveStaffAction(form: FormData) {
     monthly_salary: salary ? Number(salary) : null,
     email: text(form, "email"),
     phone: text(form, "phone"),
-  });
+    ...(text(form, "company") ? { company: text(form, "company") === "enrich" ? "enrich" : "mastervlsi" } : {}),
+  } as Parameters<Awaited<ReturnType<typeof getRepo>>["saveStaff"]>[0]);
   revalidatePath("/", "layout");
 }
 

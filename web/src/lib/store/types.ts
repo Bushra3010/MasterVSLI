@@ -31,7 +31,28 @@ export type TableName =
   | "profiles"
   | "staff_tasks"
   | "payment_requests"
-  | "admission_enquiries";
+  | "admission_enquiries"
+  | "branches"
+  | "colleges"
+  | "tpo_contacts"
+  | "mous"
+  | "campus_drives"
+  | "clients"
+  | "projects"
+  | "timesheets"
+  | "invoices"
+  | "leads"
+  | "lead_activities"
+  | "hr_contacts"
+  | "hr_company_history"
+  | "hr_calls"
+  | "ambassador_activities"
+  | "course_modules"
+  | "module_progress"
+  | "assessments"
+  | "terms"
+  | "consents"
+  | "alerts";
 
 export interface Query {
   eq?: Record<string, string | number | boolean | null>;

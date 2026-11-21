@@ -92,7 +92,7 @@ export async function generatePayrollAction(form: FormData) {
   if (!/^\d{4}-\d{2}$/.test(month)) throw new Error("Pick a month");
   await (await getRepo()).generatePayroll(month);
   revalidatePath("/hr");
-  redirect(`/hr?month=${month}`);
+  redirect(`/hr?month=${month}${form.get("company") === "enrich" ? "&company=enrich" : ""}`);
 }
 
 export async function markPayrollPaidAction(id: string) {
@@ -111,6 +111,7 @@ export async function markPayrollPaidAction(id: string) {
     vendor_id: null,
     reference: `PAYROLL-${row.month}`,
     note: staff ? `${staff.full_name} (${staff.employee_code})` : null,
+    company: staff?.company ?? "mastervlsi",
   });
   revalidatePath("/hr");
   revalidatePath("/accounts");
@@ -128,6 +129,7 @@ export async function addFinanceEntryAction(form: FormData) {
       vendor_id: z.string().optional(),
       reference: z.string().optional(),
       note: z.string().optional(),
+      company: z.enum(["mastervlsi", "enrich"]).default("mastervlsi"),
     })
     .parse(Object.fromEntries(form));
   if (e.kind === "settlement" && !e.vendor_id) throw new Error("Pick the vendor being settled");
@@ -211,10 +213,11 @@ export async function broadcastAction(_: unknown, form: FormData): Promise<Broad
 // ---- users & roles (admins only) ------------------------------------------------------
 export async function setRoleAction(form: FormData) {
   const me = await requireStaff();
-  if (me.role !== "admin") throw new Error("Only admins can change roles");
+  if (me.role !== "admin" && me.role !== "super_admin") throw new Error("Only admins can change roles");
   const id = String(form.get("id") || "");
   const role = String(form.get("role")) as Role;
-  if (!["admin", "staff", "student"].includes(role)) throw new Error("Invalid role");
+  if (!["super_admin", "admin", "staff", "student"].includes(role)) throw new Error("Invalid role");
+  if (role === "super_admin" && me.role !== "super_admin") throw new Error("Only a super admin can create another super admin");
   if (id === me.userId) throw new Error("You can't change your own role");
   await (await getRepo()).setRole(id, role);
   revalidatePath("/access");

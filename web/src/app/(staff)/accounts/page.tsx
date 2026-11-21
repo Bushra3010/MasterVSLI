@@ -13,8 +13,11 @@ const INCOME_CATS = ["Corporate training", "Workshop", "Consulting", "Interest",
 export default async function AccountsPage({ searchParams }: PageProps<"/accounts">) {
   const sp = await searchParams;
   const month = typeof sp.month === "string" && /^\d{4}-\d{2}$/.test(sp.month) ? sp.month : "";
+  const company = sp.company === "enrich" ? "enrich" : "mastervlsi";
   const repo = await getRepo();
-  const [{ vendors, allocations, installments, payments }, entries] = await Promise.all([repo.ledger(), repo.financeEntries()]);
+  const [{ vendors, allocations, installments, payments: allPayments }, allEntries] = await Promise.all([repo.ledger(), repo.financeEntries()]);
+  const entries = allEntries.filter((e) => (e.company ?? "mastervlsi") === company);
+  const payments = company === "mastervlsi" ? allPayments : [];
   const inMonth = (d: string) => !month || d.startsWith(month);
 
   const feeIncome = payments.filter((p) => inMonth(p.paid_at.slice(0, 10))).reduce((a, p) => a + Number(p.amount), 0);
@@ -47,6 +50,10 @@ export default async function AccountsPage({ searchParams }: PageProps<"/account
         subtitle="Fee income plus other income, institute expenses and vendor settlements, in one cash book."
         actions={
           <div className="flex flex-wrap gap-1 text-xs">
+            {([["mastervlsi", "MasterVLSI books"], ["enrich", "Enrich Silicon books"]] as const).map(([k, l]) => (
+              <Link key={k} href={`/accounts?company=${k}`} className={`rounded-md border px-2 py-1 ${company === k ? "border-brand bg-brand text-white" : "border-line bg-white"}`}>{l}</Link>
+            ))}
+            <span className="mx-1 text-line">|</span>
             <Link href="/accounts" className={`rounded-md border px-2 py-1 ${!month ? "border-navy bg-navy text-white" : "border-line bg-white"}`}>All time</Link>
             {months.slice(0, 6).map((m) => (
               <Link key={m} href={`/accounts?month=${m}`} className={`rounded-md border px-2 py-1 ${month === m ? "border-navy bg-navy text-white" : "border-line bg-white"}`}>{m}</Link>
@@ -65,6 +72,7 @@ export default async function AccountsPage({ searchParams }: PageProps<"/account
       <div className="mt-5 grid gap-5 xl:grid-cols-3">
         <Card title="Record income / expense / settlement" className="xl:col-span-2">
           <form action={addFinanceEntryAction} className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <input type="hidden" name="company" value={company} />
             <label className="text-xs text-muted">Type
               <select name="kind" className="input mt-1 py-1.5" defaultValue="expense">
                 <option value="expense">Expense</option><option value="income">Other income</option><option value="settlement">Vendor settlement</option>

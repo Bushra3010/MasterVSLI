@@ -109,7 +109,7 @@ export default async function AccessPage({ searchParams }: PageProps<"/access">)
       <Card title="Users & roles (role-based access)" className="mt-5" bodyClass="p-0 overflow-x-auto">
         <p className="border-b border-line px-4 py-2 text-xs text-muted">
           <b>Admin</b>: everything, including changing roles. <b>Staff</b>: all ERP modules. <b>Student</b>: only their own portal. New logins start as Student.
-          {me?.role !== "admin" && " Only admins can change roles."}
+          {me?.role !== "admin" && me?.role !== "super_admin" && " Only admins can change roles."} <b>Super admin</b>: also sees Kacha (other-account) fees.
         </p>
         <table className="table">
           <thead><tr><th>User</th><th>Since</th><th>Role</th></tr></thead>
@@ -119,11 +119,11 @@ export default async function AccessPage({ searchParams }: PageProps<"/access">)
                 <td className="font-medium">{u.full_name || u.id.slice(0, 8)}{u.id === me?.userId && <span className="ml-1 text-xs text-muted">(you)</span>}</td>
                 <td>{fmtDate(u.created_at)}</td>
                 <td>
-                  {me?.role === "admin" && u.id !== me.userId ? (
+                  {(me?.role === "admin" || me?.role === "super_admin") && u.id !== me.userId ? (
                     <form action={setRoleAction} className="flex items-center gap-1">
                       <input type="hidden" name="id" value={u.id} />
                       <select name="role" defaultValue={u.role} aria-label={`Role for ${u.full_name}`} className="input w-auto py-1">
-                        <option value="admin">Admin</option><option value="staff">Staff</option><option value="student">Student</option>
+                        {me?.role === "super_admin" && <option value="super_admin">Super admin</option>}<option value="admin">Admin</option><option value="staff">Staff</option><option value="student">Student</option>
                       </select>
                       <button className="btn-navy py-1 text-xs">Save</button>
                     </form>

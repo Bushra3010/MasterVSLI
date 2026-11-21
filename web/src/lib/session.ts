@@ -23,7 +23,7 @@ export const getSession = cache(async (): Promise<Session | null> => {
   if (!isSupabaseConfigured()) {
     const v = (await cookies()).get(DEMO_COOKIE)?.value;
     if (!v) return null;
-    if (v === "admin") return { role: "admin", name: "Demo Admin", demo: true };
+    if (v === "admin") return { role: "super_admin", name: "Demo Admin", demo: true };
     if (v.startsWith("student:")) {
       const studentId = v.slice(8);
       const [s] = await new DemoStore().select<{ full_name: string }>("students", { eq: { id: studentId } });
@@ -38,7 +38,7 @@ export const getSession = cache(async (): Promise<Session | null> => {
     db.from("profiles").select("role, full_name").eq("id", data.user.id).maybeSingle(),
     db.from("students").select("id, full_name").eq("user_id", data.user.id).maybeSingle(),
   ]);
-  const role: Role = profile?.role === "admin" || profile?.role === "staff" ? profile.role : "student";
+  const role: Role = ["super_admin", "admin", "staff"].includes(profile?.role) ? (profile!.role as Role) : "student";
   return {
     role,
     name: profile?.full_name || student?.full_name || data.user.email || "User",
@@ -74,3 +74,7 @@ export async function getStore(): Promise<Store> {
 export function getServiceStore(): Store {
   return isSupabaseConfigured() ? new SupabaseStore(supabaseAdmin()) : new DemoStore();
 }
+
+/** Super admins see Kacha (other-account) fees; everyone else only Paka. */
+export const isSuperAdmin = (s: Session | null) => s?.role === "super_admin";
+export const isAdmin = (s: Session | null) => s?.role === "super_admin" || s?.role === "admin";

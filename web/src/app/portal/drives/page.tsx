@@ -1,7 +1,8 @@
 import { Lock } from "lucide-react";
 import { Badge, Card, PageHeader, StatusBadge } from "@/components/ui";
 import { fmtDate } from "@/lib/format";
-import { getRepo, getStudentReadRepo } from "@/lib/server";
+import Link from "next/link";
+import { getRepo, getServiceRepo, getStudentReadRepo } from "@/lib/server";
 import { requireStudent } from "@/lib/session";
 import { respondAction } from "../actions";
 
@@ -11,7 +12,8 @@ export default async function PortalDrives() {
   const s = await requireStudent();
   const repo = await getRepo();
   const p = await (await getStudentReadRepo()).profile(s.studentId);
-  const allowed = p?.student.status === "active" && p.access.find((a) => a.channel === "placement")?.enabled;
+  const agreed = !(await getServiceRepo().consentFor(s.studentId, "placement")).required;
+  const allowed = agreed && p?.student.status === "active" && p.access.find((a) => a.channel === "placement")?.enabled;
   const drives = allowed ? (await repo.drives()).filter((d) => d.status !== "closed") : [];
   const mine = new Map(p?.responses.map((r) => [r.drive_id, r]) ?? []);
 
@@ -20,7 +22,8 @@ export default async function PortalDrives() {
       <PageHeader title="Placement drives" subtitle="Tell us if you want to be considered — your “Yes” goes straight to the placement team's sheet." />
       {!allowed ? (
         <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-800">
-          <Lock size={18} /> Placement applications are blocked for your account. Please contact the admin office.
+          <Lock size={18} />
+          {agreed ? "Placement applications are blocked for your account. Please contact the admin office." : <span>Your placement profile is not active yet. <Link href="/portal/agreement" className="font-medium underline">Accept the Placement Terms &amp; Conditions</Link> to apply for drives.</span>}
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

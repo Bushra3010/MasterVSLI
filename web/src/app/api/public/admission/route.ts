@@ -48,14 +48,15 @@ export async function POST(req: Request) {
   if (d.website) return NextResponse.json({ ok: true }, { headers }); // bot
   if (!d.email && !d.phone) return NextResponse.json({ error: "Email or phone is required." }, { status: 400, headers });
 
-  await getServiceRepo().addEnquiry({
+  // Website enquiries land in the lead pipeline (stage "lead", source Website).
+  await getServiceRepo().createLead({
     full_name: d.full_name,
     email: d.email || null,
     phone: d.phone || null,
     course_code: d.course_code?.toUpperCase() || null,
     city: d.city || null,
-    message: d.message || null,
-    source: sameSite ? "apply page" : "website",
+    remarks: d.message || null,
+    source: "Website",
   });
   if (isForm && sameSite) return NextResponse.redirect(new URL("/apply?sent=1", req.url), 303);
   return NextResponse.json({ ok: true }, { headers });

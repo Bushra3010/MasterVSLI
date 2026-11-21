@@ -28,6 +28,7 @@ import type {
   Vendor,
 } from "../types";
 import { CHANNELS } from "../types";
+import { buildCrmSeed, type CrmTables } from "./seed-crm";
 
 /** Deterministic PRNG so demo data is stable across reloads. */
 function rng(seed: number) {
@@ -40,7 +41,7 @@ function rng(seed: number) {
   };
 }
 
-export interface DemoTables {
+export interface DemoTables extends CrmTables {
   courses: Course[];
   batches: Batch[];
   vendors: Vendor[];
@@ -268,7 +269,7 @@ export function buildSeed(): DemoTables {
     const paidUpTo = status === "completed" ? 5 : Math.floor(r() * 6); // number of installments already paid overall
     let instIndex = 0;
     for (const [vid, amt, subs, n] of plan) {
-      const alloc: Allocation = { id: `a-${id}-${vid}`, student_id: id, vendor_id: vid, amount: amt };
+      const alloc: Allocation = { id: `a-${id}-${vid}`, student_id: id, vendor_id: vid, amount: amt, account: vid === "v2" && i % 3 === 0 ? "kacha" : "paka" };
       allocations.push(alloc);
       const per = Math.round(amt / n);
       for (let k = 0; k < n; k++) {
@@ -364,7 +365,9 @@ export function buildSeed(): DemoTables {
     .filter((s) => s.status === "on_hold")
     .map((s, k) => ({ id: k + 1, student_id: s.id, action: "hold", reason: "Fee installment overdue", created_at: addDays(today, -9) + "T07:00:00Z" }));
 
+  const crm = buildCrmSeed(today, r, students, courses, staff);
   return {
+    ...crm,
     courses,
     batches,
     vendors,

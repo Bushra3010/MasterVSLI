@@ -2,7 +2,18 @@
 
 import clsx from "clsx";
 import {
+  ArrowDownUp,
+  BellRing,
+  Building2,
+  Contact,
+  Cpu,
+  Crown,
+  Filter,
   BadgeCheck,
+  BookOpen,
+  FileCheck2,
+  Gift,
+  ScrollText,
   BarChart3,
   Briefcase,
   CalendarClock,
@@ -41,15 +52,25 @@ const staffNav: Section[] = [
     title: "Main",
     items: [
       { href: "/dashboard", label: "Admin Dashboard", icon: LayoutDashboard },
-      { href: "/reports", label: "Reports & Dashboard", icon: BarChart3 },
+      { href: "/reports", label: "Reports & Analytics", icon: BarChart3 },
+      { href: "/alerts", label: "Alerts & Escalation", icon: BellRing },
       { href: "/me", label: "My Workspace", icon: ListTodo },
     ],
   },
   {
-    title: "Students & Training",
+    title: "Admissions",
     items: [
+      { href: "/leads", label: "Lead Management", icon: Filter },
       { href: "/students", label: "Student Management", icon: Users },
+      { href: "/colleges", label: "College Management", icon: Building2 },
+      { href: "/import", label: "Import & Export", icon: ArrowDownUp },
+    ],
+  },
+  {
+    title: "Training & Learning",
+    items: [
       { href: "/courses", label: "Course & Batch Management", icon: Layers },
+      { href: "/learning", label: "Learning & Assessments", icon: BookOpen },
       { href: "/attendance", label: "Attendance Management", icon: CalendarDays },
       { href: "/validity", label: "Training Validity & Expiry", icon: CalendarClock },
       { href: "/documents", label: "Certificates & Letters", icon: FileText },
@@ -65,18 +86,26 @@ const staffNav: Section[] = [
     ],
   },
   {
-    title: "Placements & People",
+    title: "Placements & Growth",
     items: [
       { href: "/placements", label: "Placement Management", icon: Briefcase },
-      { href: "/hr", label: "Staff & HR Management", icon: UserCog },
+      { href: "/hr-contacts", label: "HR & Company Contacts", icon: Contact },
+      { href: "/ambassadors", label: "Brand Ambassadors", icon: Crown },
       { href: "/communication", label: "Communication", icon: MessageCircle },
+    ],
+  },
+  {
+    title: "People & Enrich Silicon",
+    items: [
+      { href: "/hr", label: "Staff & HR (Payroll)", icon: UserCog },
+      { href: "/enrich", label: "Enrich Silicon (ERP)", icon: Cpu },
     ],
   },
   {
     title: "Administration",
     items: [
       { href: "/access", label: "Security & Access Control", icon: ShieldCheck },
-      { href: "/settings", label: "Settings", icon: Settings },
+      { href: "/settings", label: "Settings & Terms", icon: Settings },
     ],
   },
 ];
@@ -86,8 +115,22 @@ const studentNav: Section[] = [
     title: "My Training",
     items: [
       { href: "/portal", label: "My Dashboard", icon: GraduationCap },
-      { href: "/portal/drives", label: "Placement Drives", icon: Briefcase },
+      { href: "/portal/learning", label: "Learning & Assessments", icon: BookOpen },
       { href: "/portal/documents", label: "My Documents", icon: BadgeCheck },
+    ],
+  },
+  {
+    title: "Placement",
+    items: [
+      { href: "/portal/agreement", label: "Placement Agreement", icon: FileCheck2 },
+      { href: "/portal/drives", label: "Company Drives", icon: Briefcase },
+    ],
+  },
+  {
+    title: "Earn & Account",
+    items: [
+      { href: "/portal/earn", label: "Earn & Rewards", icon: Gift },
+      { href: "/portal/terms", label: "Terms & Conditions", icon: ScrollText },
       { href: "/portal/account", label: "Account", icon: KeyRound },
     ],
   },

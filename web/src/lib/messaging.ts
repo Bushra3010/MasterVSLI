@@ -10,6 +10,8 @@ import type { StudentListItem } from "./types";
  */
 export const emailConfigured = () => Boolean(process.env.RESEND_API_KEY && process.env.NOTIFY_FROM);
 export const whatsappConfigured = () => Boolean(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_ID);
+/** SMS via Twilio (TWILIO_SID, TWILIO_TOKEN, TWILIO_FROM) or Fast2SMS (FAST2SMS_KEY). */
+export const smsConfigured = () => Boolean((process.env.TWILIO_SID && process.env.TWILIO_TOKEN && process.env.TWILIO_FROM) || process.env.FAST2SMS_KEY);
 
 export const AUDIENCES: Record<string, string> = {
   active: "All active students",
@@ -59,4 +61,25 @@ export async function sendWhatsApp(to: string, text: string) {
     body: JSON.stringify({ messaging_product: "whatsapp", to, type: "text", text: { body: text } }),
   });
   if (!res.ok) throw new Error(`WhatsApp ${res.status}`);
+}
+
+export async function sendSms(phone: string, text: string) {
+  const digits = waNumber(phone);
+  if (!digits) throw new Error("bad number");
+  if (process.env.FAST2SMS_KEY) {
+    const res = await fetch("https://www.fast2sms.com/dev/bulkV2", {
+      method: "POST",
+      headers: { authorization: process.env.FAST2SMS_KEY, "content-type": "application/json" },
+      body: JSON.stringify({ route: "q", message: text, numbers: digits.slice(-10) }),
+    });
+    if (!res.ok) throw new Error(`Fast2SMS ${res.status}`);
+    return;
+  }
+  const body = new URLSearchParams({ To: `+${digits}`, From: process.env.TWILIO_FROM!, Body: text });
+  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${process.env.TWILIO_SID}/Messages.json`, {
+    method: "POST",
+    headers: { authorization: `Basic ${btoa(`${process.env.TWILIO_SID}:${process.env.TWILIO_TOKEN}`)}`, "content-type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  if (!res.ok) throw new Error(`Twilio ${res.status}`);
 }
