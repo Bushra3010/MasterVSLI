@@ -9,7 +9,7 @@ export async function signIn(_: unknown, form: FormData) {
   if (!isSupabaseConfigured()) {
     const persona = String(form.get("persona") || "admin");
     (await cookies()).set(DEMO_COOKIE, persona, { httpOnly: true, sameSite: "lax", path: "/" });
-    redirect(persona === "admin" ? "/dashboard" : "/portal");
+    redirect(persona === "admin" ? "/dashboard" : persona.startsWith("college:") ? "/college" : "/portal");
   }
   const db = await supabaseServer();
   const { error } = await db.auth.signInWithPassword({

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { Card, PageHeader } from "@/components/ui";
 import { getRepo } from "@/lib/server";
+import type { Branch, Client, College } from "@/lib/types";
 import { updateProfileAction } from "../../../actions";
 
 export const metadata = { title: "Edit student" };
@@ -43,7 +44,7 @@ const Grid = ({ children }: { children: ReactNode }) => <div className="grid gap
 export default async function EditStudentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const repo = await getRepo();
-  const [p, courses, batches] = await Promise.all([repo.profile(id), repo.courses(), repo.batches()]);
+  const [p, courses, batches, branches, colleges, clients] = await Promise.all([repo.profile(id), repo.courses(), repo.batches(), repo.list<Branch>("branches"), repo.list<College>("colleges"), repo.list<Client>("clients")]);
   if (!p) notFound();
   const s = p.student;
   const pr = s.professional ?? {};
@@ -136,6 +137,10 @@ export default async function EditStudentPage({ params }: { params: Promise<{ id
 
         <Card title="Course & admission">
           <Grid>
+            <S label="Student category" name="category" value={s.category ?? "normal"} options={[["normal", "Normal (retail / individual)"], ["college", "College student (via TPO)"], ["corporate", "Corporate student"]]} />
+            <S label="Branch / domain" name="branch_id" value={s.branch_id} options={branches.map((b) => [b.id, b.name])} />
+            <S label="College (college students)" name="college_id" value={s.college_id} options={colleges.map((c) => [c.id, c.name])} />
+            <S label="Company (corporate students)" name="client_id" value={s.client_id} options={clients.map((c) => [c.id, c.name])} />
             <S label="Course" name="course_id" value={s.course_id} options={courses.map((c) => [c.id, c.name])} />
             <S label="Batch" name="batch_id" value={s.batch_id} options={batches.map((b) => [b.id, b.name])} />
             <S label="Training mode" name="training_mode" value={s.training_mode} options={[["online", "Online"], ["offline", "Offline"], ["hybrid", "Hybrid"]]} />

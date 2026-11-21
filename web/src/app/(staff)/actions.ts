@@ -189,6 +189,11 @@ export async function updateProfileAction(id: string, form: FormData) {
       ...group("pro", ["working_status", "company", "total_exp", "relevant_exp", "current_ctc", "expected_ctc", "notice_period", "preferred_location", "interview_mode"]),
       relocate: form.get("pro.relocate") === "on",
     },
+    ...(g("category") ? { category: (["normal", "college", "corporate"].includes(g("category")!) ? g("category") : "normal") as "normal" | "college" | "corporate" } : {}),
+    ...(form.has("branch_id") ? { branch_id: opt("branch_id") } : {}),
+    // converting e.g. a college student to a normal student clears the college / company link
+    ...(form.has("college_id") ? { college_id: g("category") === "college" ? opt("college_id") : null } : {}),
+    ...(form.has("client_id") ? { client_id: g("category") === "corporate" ? opt("client_id") : null } : {}),
     course_id: opt("course_id"),
     batch_id: opt("batch_id"),
     training_mode: (g("training_mode") as "online" | "offline" | "hybrid") || "hybrid",
@@ -284,6 +289,7 @@ export async function saveStaffAction(form: FormData) {
     email: text(form, "email"),
     phone: text(form, "phone"),
     ...(text(form, "company") ? { company: text(form, "company") === "enrich" ? "enrich" : "mastervlsi" } : {}),
+    ...(form.has("branch_id") ? { branch_id: text(form, "branch_id") } : {}),
   } as Parameters<Awaited<ReturnType<typeof getRepo>>["saveStaff"]>[0]);
   revalidatePath("/", "layout");
 }

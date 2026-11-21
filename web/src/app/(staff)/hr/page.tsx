@@ -4,7 +4,8 @@ import { I, Row, Save } from "@/components/form-bits";
 import { Badge, Card, PageHeader, Stat, StatusBadge } from "@/components/ui";
 import { addDays, fmtDate, inr, todayISO } from "@/lib/format";
 import { getRepo } from "@/lib/server";
-import type { StaffAttStatus } from "@/lib/types";
+import type { Appraisal, Branch, StaffAttStatus } from "@/lib/types";
+import { saveRowAction } from "../crm-actions";
 import { saveStaffAction } from "../actions";
 import { addLeaveAction, addTaskAction, decideLeaveAction, generatePayrollAction, markPayrollPaidAction, markStaffAttendanceAction, toggleTaskAction } from "../module-actions";
 
@@ -29,6 +30,13 @@ export default async function HrPage({ searchParams }: PageProps<"/hr">) {
   const company = sp.company === "enrich" ? "enrich" : "mastervlsi";
   const [tasksAll, staffAll, att, leavesAll, payrollAll] = await Promise.all([repo.tasks(), repo.staff(), repo.staffAttendance(days[0] < date ? days[0] : date, today > date ? today : date), repo.leaveRequests(), repo.payroll(month)]);
   const staff = staffAll.filter((x) => (x.company ?? "mastervlsi") === company);
+  const [branches, appraisals] = await Promise.all([repo.list<Branch>("branches"), repo.list<Appraisal>("staff_appraisals", { order: { column: "created_at", ascending: false } })]);
+  const branchSel = (v?: string | null) => (
+    <select name="branch_id" defaultValue={v ?? ""} aria-label="Branch" title="Branch: staff with a branch see only that branch's students" className="input w-36 py-1.5">
+      <option value="">All branches</option>
+      {branches.filter((b) => b.company === company).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+    </select>
+  );
   const ids = new Set(staff.map((x) => x.id));
   const tasks = tasksAll.filter((t) => ids.has(t.staff_id));
   const leaves = leavesAll.filter((l) => ids.has(l.staff_id));
@@ -199,6 +207,35 @@ export default async function HrPage({ searchParams }: PageProps<"/hr">) {
         </table>
       </Card>
 
+      <Card title="Performance appraisals" icon={<UserRound size={15} />} className="mt-5" bodyClass="p-0 overflow-x-auto">
+        <table className="table">
+          <thead><tr><th>Staff</th><th>Period</th><th>Rating</th><th>Increment</th><th>New monthly</th><th>Comments</th></tr></thead>
+          <tbody>
+            {appraisals.filter((a) => ids.has(a.staff_id)).map((a) => {
+              const st = staff.find((x) => x.id === a.staff_id);
+              return (
+                <tr key={a.id}>
+                  <td className="font-medium">{st?.full_name}</td><td>{a.period}</td><td>{"★".repeat(a.rating)}<span className="text-slate-300">{"★".repeat(5 - a.rating)}</span></td>
+                  <td>{a.increment_pct}%</td><td className="tabular-nums">{inr(Number(st?.monthly_salary ?? 0) * (1 + Number(a.increment_pct) / 100))}</td><td className="text-xs">{a.comments}</td>
+                </tr>
+              );
+            })}
+            <tr>
+              <td colSpan={6}>
+                <form action={saveRowAction.bind(null, "staff_appraisals")} className="flex flex-wrap items-center gap-2">
+                  <select name="staff_id" required aria-label="Staff" className="input w-auto py-1.5">{staff.map((x) => <option key={x.id} value={x.id}>{x.full_name}</option>)}</select>
+                  <I name="period" required placeholder="Period, e.g. FY 2026-27" w="w-44" />
+                  <select name="rating" aria-label="Rating" className="input w-auto py-1.5">{[5, 4, 3, 2, 1].map((r) => <option key={r} value={r}>{r} ★</option>)}</select>
+                  <I name="increment_pct" type="number" placeholder="Increment %" w="w-28" />
+                  <I name="comments" placeholder="Comments" w="min-w-48 flex-1" />
+                  <Save label="+ Add appraisal" />
+                </form>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </Card>
+
       <Card title="Staff records" icon={<UserRound size={15} />} className="mt-5">
         {staff.map((s) => (
           <Row key={s.id} action={saveStaffAction}>
@@ -211,6 +248,7 @@ export default async function HrPage({ searchParams }: PageProps<"/hr">) {
             <I name="monthly_salary" type="number" value={s.monthly_salary} w="w-28" placeholder="Monthly ₹" />
             <I name="email" type="email" value={s.email} w="w-44" placeholder="Email" />
             <I name="phone" value={s.phone} w="w-32" placeholder="Phone" />
+            {branchSel(s.branch_id)}
             <Save />
           </Row>
         ))}
@@ -224,6 +262,7 @@ export default async function HrPage({ searchParams }: PageProps<"/hr">) {
           <I name="monthly_salary" type="number" w="w-28" placeholder="Monthly ₹" />
           <I name="email" type="email" w="w-44" placeholder="Email" />
           <I name="phone" w="w-32" placeholder="Phone" />
+          {branchSel()}
           <Save label="+ Add staff" />
         </Row>
       </Card>

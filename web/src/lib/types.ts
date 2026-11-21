@@ -1,6 +1,6 @@
 export * from "./types-crm";
 import type { Company, FeeAccount, StudentCategory } from "./types-crm";
-export type Role = "super_admin" | "admin" | "staff" | "student";
+export type Role = "super_admin" | "admin" | "staff" | "student" | "college";
 export type StudentStatus = "active" | "on_hold" | "expired" | "completed" | "dropped";
 export type TrainingMode = "online" | "offline" | "hybrid";
 export type Channel = "zoom" | "teamviewer" | "biometric" | "placement" | "portal";

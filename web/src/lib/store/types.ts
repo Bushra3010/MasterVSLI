@@ -52,7 +52,16 @@ export type TableName =
   | "assessments"
   | "terms"
   | "consents"
-  | "alerts";
+  | "alerts"
+  | "assignments"
+  | "assignment_submissions"
+  | "college_logins"
+  | "tpo_interactions"
+  | "alert_contacts"
+  | "project_milestones"
+  | "staff_appraisals"
+  | "company_profiles"
+  | "audit_log";
 
 export interface Query {
   eq?: Record<string, string | number | boolean | null>;

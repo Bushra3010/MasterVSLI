@@ -4,8 +4,9 @@ import { Badge, Card, PageHeader, Stat } from "@/components/ui";
 import { fmtDate } from "@/lib/format";
 import { ALERT_RULES } from "@/lib/repo-crm";
 import { getRepo } from "@/lib/server";
-import type { AlertRow } from "@/lib/types";
-import { resolveAlertAction } from "../crm-actions";
+import type { AlertContact, AlertRow } from "@/lib/types";
+import { I, Save } from "@/components/form-bits";
+import { deleteRowAction, resolveAlertAction, saveRowAction } from "../crm-actions";
 import { RunAlerts } from "./run-alerts";
 
 export const metadata = { title: "Alerts & escalation" };
@@ -26,7 +27,8 @@ export default async function AlertsPage({ searchParams }: PageProps<"/alerts">)
   const show = typeof sp.show === "string" ? sp.show : "open";
   const kind = typeof sp.kind === "string" ? sp.kind : "";
   const repo = await getRepo();
-  const alerts = await repo.list<AlertRow>("alerts", { order: { column: "created_at", ascending: false } });
+  const [alerts, contacts] = await Promise.all([repo.list<AlertRow>("alerts", { order: { column: "created_at", ascending: false } }), repo.list<AlertContact>("alert_contacts", { order: { column: "role_name" } })]);
+  const roles = [...new Set(Object.values(ALERT_RULES).flatMap((r) => r.chain))];
   const open = alerts.filter((a) => a.status === "open");
   const shown = alerts.filter((a) => (show === "all" || a.status === show) && (!kind || a.kind === kind));
   const now = new Date().getTime(); // server component: rendered once per request
@@ -98,6 +100,29 @@ export default async function AlertsPage({ searchParams }: PageProps<"/alerts">)
           <p className="mt-3 text-[11px] text-muted">The engine runs with the daily cron and when you press the button. Unresolved alerts move one level up each time their SLA passes (max 3 levels).</p>
         </Card>
       </div>
+
+      <Card title="Who gets notified (email / WhatsApp)" className="mt-5" bodyClass="p-0 overflow-x-auto">
+        <p className="border-b border-line px-4 py-2 text-xs text-muted">When an alert is raised or escalated, everyone listed for the responsible role is emailed and WhatsApped (once email / WhatsApp are set up in Settings).</p>
+        <table className="table">
+          <thead><tr><th>Role</th><th>Name</th><th>Email</th><th>Mobile</th><th /></tr></thead>
+          <tbody>
+            {contacts.map((c) => (
+              <tr key={c.id}><td>{c.role_name}</td><td className="font-medium">{c.name}</td><td>{c.email}</td><td>{c.phone}</td><td><form action={deleteRowAction.bind(null, "alert_contacts", c.id)}><button className="text-xs text-muted hover:text-brand">Remove</button></form></td></tr>
+            ))}
+            <tr>
+              <td colSpan={5}>
+                <form action={saveRowAction.bind(null, "alert_contacts")} className="flex flex-wrap items-center gap-2">
+                  <select name="role_name" aria-label="Role" className="input w-auto py-1.5">{roles.map((r) => <option key={r}>{r}</option>)}</select>
+                  <I name="name" required placeholder="Person name" w="w-44" />
+                  <I name="email" type="email" placeholder="Email" w="w-52" />
+                  <I name="phone" placeholder="Mobile" w="w-36" />
+                  <Save label="+ Add contact" />
+                </form>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </Card>
     </>
   );
 }

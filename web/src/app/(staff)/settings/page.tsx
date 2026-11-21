@@ -2,9 +2,9 @@ import { BookOpen, Building2, GitBranch, Plug, ScrollText, UserRound } from "luc
 import { I, Row, Save } from "@/components/form-bits";
 import { fmtDate } from "@/lib/format";
 import { getRepo } from "@/lib/server";
-import type { Branch, Consent, TermsDoc } from "@/lib/types";
+import type { Branch, CompanyProfile, Consent, TermsDoc } from "@/lib/types";
 import { DEFAULT_GENERAL_TERMS, DEFAULT_PLACEMENT_TERMS } from "@/lib/store/seed-crm";
-import { deleteRowAction, saveRowAction, saveTermsAction } from "../crm-actions";
+import { deleteRowAction, saveCompanyProfileAction, saveRowAction, saveTermsAction } from "../crm-actions";
 import Link from "next/link";
 import { Badge, Card, PageHeader } from "@/components/ui";
 
@@ -35,6 +35,7 @@ export default async function SettingsPage() {
     repo.students(),
   ]);
   const sname = new Map(students.map((x) => [x.id, `${x.full_name} (${x.enrollment_no})`]));
+  const profiles = await repo.list<CompanyProfile>("company_profiles");
   const active = (k: "general" | "placement") => terms.find((t) => t.kind === k && t.active);
   return (
     <>
@@ -96,6 +97,24 @@ export default async function SettingsPage() {
                 </div>
               </form>
               {t ? <p className="mt-2 text-[11px] text-muted">Live: version {t.version} · {t.items.length} terms · published {fmtDate(t.created_at)}</p> : <p className="mt-2 text-[11px] text-amber-700">Not published yet — the default wording is pre-filled. Review it and press Publish to switch this on for students.</p>}
+            </Card>
+          );
+        })}
+      </div>
+
+      <div className="mb-5 grid gap-5 xl:grid-cols-2">
+        {(["mastervlsi", "enrich"] as const).map((k) => {
+          const p = profiles.find((x) => x.company === k);
+          return (
+            <Card key={k} title={`${k === "enrich" ? "Enrich Silicon" : "MasterVLSI"} – legal & bank details (used on invoices)`} icon={<Building2 size={15} />}>
+              <form action={saveCompanyProfileAction} className="grid grid-cols-2 gap-2 text-xs">
+                <input type="hidden" name="company" value={k} />
+                {([["legal_name", "Legal name"], ["gstin", "GSTIN"], ["pan", "PAN"], ["email", "Billing email"], ["phone", "Phone"], ["bank_name", "Bank"], ["bank_account", "Account no."], ["bank_ifsc", "IFSC"]] as const).map(([f, l]) => (
+                  <label key={f} className="text-muted">{l}<input name={f} defaultValue={(p?.[f] as string) ?? ""} className="input mt-0.5 py-1.5" /></label>
+                ))}
+                <label className="col-span-2 text-muted">Address<input name="address" defaultValue={p?.address ?? ""} className="input mt-0.5 py-1.5" /></label>
+                <div className="col-span-2 flex justify-end"><Save /></div>
+              </form>
             </Card>
           );
         })}

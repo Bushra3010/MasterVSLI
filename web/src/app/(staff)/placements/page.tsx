@@ -11,7 +11,7 @@ import { SyncButton } from "./sync-button";
 
 export const metadata = { title: "Placements" };
 
-const STAGES = ["Applied", "Shortlisted", "Interview", "Offered", "Rejected", "Joined"];
+const STAGES = ["Applied", "Shortlisted", "Interview", "No-show", "Offered", "Rejected", "Joined"];
 
 export default async function PlacementsPage({ searchParams }: PageProps<"/placements">) {
   const sp = await searchParams;

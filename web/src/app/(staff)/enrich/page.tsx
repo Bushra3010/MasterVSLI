@@ -4,9 +4,9 @@ import { I, Save } from "@/components/form-bits";
 import { Badge, Card, PageHeader, Stat } from "@/components/ui";
 import { addDays, fmtDate, inr, todayISO } from "@/lib/format";
 import { getRepo } from "@/lib/server";
-import type { Client, Invoice, Project, Timesheet } from "@/lib/types";
+import type { Client, Invoice, Milestone, Project, Timesheet } from "@/lib/types";
 import { saveStaffAction } from "../actions";
-import { addInvoiceAction, hireStudentAction, markInvoicePaidAction, saveRowAction } from "../crm-actions";
+import { addInvoiceAction, hireStudentAction, markInvoicePaidAction, saveRowAction, toggleMilestoneAction } from "../crm-actions";
 
 export const metadata = { title: "Enrich Silicon" };
 
@@ -25,6 +25,7 @@ export default async function EnrichPage({ searchParams }: PageProps<"/enrich">)
     repo.students(),
     repo.financeEntries(),
   ]);
+  const milestones = await repo.list<Milestone>("project_milestones", { order: { column: "due_date" } });
   const emp = staff.filter((s) => s.company === "enrich");
   const mv = staff.filter((s) => (s.company ?? "mastervlsi") === "mastervlsi");
   const cname = new Map(clients.map((c) => [c.id, c.name]));
@@ -180,6 +181,29 @@ export default async function EnrichPage({ searchParams }: PageProps<"/enrich">)
               <Save label="+ Add project" />
             </form>
           </Card>
+          <Card title="Project milestones" className="xl:col-span-2" bodyClass="p-0 overflow-x-auto">
+            <table className="table">
+              <thead><tr><th>Project</th><th>Milestone</th><th>Due</th><th>Status</th></tr></thead>
+              <tbody>
+                {milestones.map((m) => {
+                  const late = !m.done && m.due_date < todayISO();
+                  return (
+                    <tr key={m.id} className={late ? "bg-red-50" : ""}>
+                      <td>{pname.get(m.project_id)}</td><td className="font-medium">{m.title}</td><td>{fmtDate(m.due_date)}</td>
+                      <td><form action={toggleMilestoneAction.bind(null, m.id, !m.done)}><button><Badge tone={m.done ? "green" : late ? "red" : "amber"}>{m.done ? `Done ${fmtDate(m.done_on)}` : late ? "Delayed – mark done" : "Open – mark done"}</Badge></button></form></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <form action={saveRowAction.bind(null, "project_milestones")} className="flex flex-wrap items-center gap-2 border-t border-line p-3">
+              <select name="project_id" required aria-label="Project" className="input w-auto py-1.5">{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+              <I name="title" required placeholder="Milestone" w="min-w-48 flex-1" />
+              <I name="due_date" type="date" required placeholder="Due" w="w-36" />
+              <Save label="+ Add milestone" />
+            </form>
+            <p className="border-t border-line px-3 py-2 text-[11px] text-muted">Overdue milestones raise a “Project milestone delay” alert automatically.</p>
+          </Card>
           <Card title={`Timesheets (${weekHours} h in last 7 days)`} icon={<Clock size={15} />} bodyClass="p-0 overflow-x-auto">
             <form action={saveRowAction.bind(null, "timesheets")} className="flex flex-wrap items-center gap-2 border-b border-line p-3">
               <select name="staff_id" required aria-label="Employee" className="input w-auto py-1.5">{emp.map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}</select>
@@ -207,17 +231,17 @@ export default async function EnrichPage({ searchParams }: PageProps<"/enrich">)
           </div>
           <Card title="Invoices (client-wise, per company)" bodyClass="p-0 overflow-x-auto">
             <table className="table">
-              <thead><tr><th>Invoice no.</th><th>Company</th><th>Client</th><th>Date</th><th>Description</th><th>Amount</th><th>GST</th><th>Total</th><th>Status</th></tr></thead>
+              <thead><tr><th>Invoice no.</th><th>Company</th><th>Client</th><th>Date</th><th>Description</th><th>Amount</th><th>GST / TDS</th><th>Total</th><th>Status</th></tr></thead>
               <tbody>
                 {invoices.map((i) => (
                   <tr key={i.id}>
-                    <td className="font-mono text-xs">{i.invoice_no}</td>
+                    <td className="font-mono text-xs"><Link href={`/enrich/invoice/${i.id}`} className="text-brand hover:underline">{i.invoice_no}</Link></td>
                     <td><Badge tone={i.company === "enrich" ? "blue" : "amber"}>{i.company === "enrich" ? "Enrich Silicon" : "MasterVLSI"}</Badge></td>
                     <td>{cname.get(i.client_id ?? "")}</td>
                     <td>{fmtDate(i.issue_date)}</td>
                     <td className="text-xs">{i.description}</td>
                     <td className="tabular-nums">{inr(i.amount)}</td>
-                    <td>{i.gst_pct}%</td>
+                    <td>{i.gst_pct}%{Number(i.tds_pct) ? ` / −${i.tds_pct}%` : ""}</td>
                     <td className="tabular-nums font-medium">{inr(gross(i))}</td>
                     <td>{i.status === "unpaid" ? <form action={markInvoicePaidAction.bind(null, i.id)} className="flex items-center gap-1"><Badge tone="amber">unpaid</Badge><button className="text-xs text-emerald-700 hover:underline">Mark paid</button></form> : <Badge tone={i.status === "paid" ? "green" : "slate"}>{i.status}{i.paid_on ? ` ${fmtDate(i.paid_on)}` : ""}</Badge>}</td>
                   </tr>
@@ -231,6 +255,7 @@ export default async function EnrichPage({ searchParams }: PageProps<"/enrich">)
               <I name="description" placeholder="Description" w="min-w-44 flex-1" />
               <I name="amount" type="number" required placeholder="Amount ₹ (before GST)" w="w-44" />
               <I name="gst_pct" type="number" value={18} placeholder="GST %" w="w-20" />
+              <I name="tds_pct" type="number" value={0} placeholder="TDS %" w="w-20" />
               <Save label="+ Create invoice" />
             </form>
           </Card>

@@ -5,7 +5,7 @@ import { getSession } from "@/lib/session";
 /** CSV export of synced attendance (opens directly in Excel). */
 export async function GET(req: Request) {
   const s = await getSession();
-  if (!s || s.role === "student") return new Response("Forbidden", { status: 403 });
+  if (!s || !["super_admin", "admin", "staff"].includes(s.role)) return new Response("Forbidden", { status: 403 });
   const url = new URL(req.url);
   const to = url.searchParams.get("to") ?? todayISO();
   const from = url.searchParams.get("from") ?? addDays(to, -30);

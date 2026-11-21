@@ -22,6 +22,12 @@ function matches(row: Row, q: Query) {
   return true;
 }
 
+const AUDITED = new Set(["students", "fee_allocations", "installments", "payments", "vendors", "courses", "batches", "staff", "payroll", "finance_entries", "invoices", "issued_letters", "student_access", "profiles", "terms", "leads", "colleges", "mous"]);
+function audit(t: string, action: string, row: Row, changes: unknown) {
+  if (!AUDITED.has(t)) return;
+  db().audit_log.unshift({ id: nextId(), at: new Date().toISOString(), user_id: null, user_email: "demo admin", table_name: t, action, record_id: String(row.id ?? row.student_id ?? ""), changes: changes as Record<string, unknown> });
+}
+
 /** In-memory store that mirrors the SQL triggers and functions in supabase/migrations. */
 export class DemoStore implements Store {
   readonly kind = "demo" as const;
@@ -47,8 +53,8 @@ export class DemoStore implements Store {
     const out: Row[] = [];
     for (const input of rows as Row[]) {
       const row: Row = { ...input };
-      if (row.id === undefined && t !== "student_access" && t !== "drive_responses")
-        row.id = ["access_events", "attendance_records", "notifications"].includes(t) ? nextId() : uuid();
+      if (row.id === undefined && !["student_access", "drive_responses", "module_progress", "college_logins", "company_profiles"].includes(t))
+        row.id = ["access_events", "attendance_records", "notifications", "audit_log"].includes(t) ? nextId() : uuid();
       if (t === "attendance_records") {
         const dup = this.table(t).some(
           (r) => r.student_id === row.student_id && r.source === row.source && r.session_date === row.session_date && r.external_ref === row.external_ref,
@@ -57,6 +63,7 @@ export class DemoStore implements Store {
       }
       this.table(t).push(row);
       out.push(row);
+      audit(t, "insert", row, row);
       // --- trigger emulation -------------------------------------------------
       if (t === "students")
         for (const ch of CHANNELS)
@@ -73,12 +80,22 @@ export class DemoStore implements Store {
   }
 
   async update<T>(t: TableName, match: Record<string, string | number>, patch: Partial<T>) {
-    for (const r of this.table(t)) if (matches(r, { eq: match })) Object.assign(r, patch);
+    for (const r of this.table(t))
+      if (matches(r, { eq: match })) {
+        const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+        const diff = Object.fromEntries(Object.entries(patch as Row).filter(([k, v]) => !same(r[k], v) && k !== "updated_at").map(([k, v]) => [k, [r[k] ?? null, v ?? null]]));
+        Object.assign(r, patch);
+        if (Object.keys(diff).length) audit(t, "update", r, diff);
+      }
   }
 
   async remove(t: TableName, match: Record<string, string | number>) {
     const rows = this.table(t);
-    for (let i = rows.length - 1; i >= 0; i--) if (matches(rows[i], { eq: match })) rows.splice(i, 1);
+    for (let i = rows.length - 1; i >= 0; i--)
+      if (matches(rows[i], { eq: match })) {
+        audit(t, "delete", rows[i], rows[i]);
+        rows.splice(i, 1);
+      }
   }
 
   async upsert<T>(t: TableName, rows: Partial<T>[], onConflict: string) {

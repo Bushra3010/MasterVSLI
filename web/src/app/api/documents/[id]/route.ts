@@ -9,7 +9,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   if (!s) return new Response("Sign in required", { status: 401 });
   const { id } = await params;
   const doc = await (await getStudentReadRepo()).document(id);
-  if (!doc || (s.role === "student" && doc.student_id !== s.studentId)) return new Response("Not found", { status: 404 });
+  const staff = ["super_admin", "admin", "staff"].includes(s.role);
+  if (!doc || (!staff && (s.role !== "student" || doc.student_id !== s.studentId))) return new Response("Not found", { status: 404 });
   const file = await openFile(doc.storage_path);
   if (!file) return new Response("File not available", { status: 404 });
   if ("url" in file) return Response.redirect(file.url, 302);

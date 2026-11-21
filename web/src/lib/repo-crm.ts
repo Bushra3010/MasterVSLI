@@ -2,7 +2,12 @@ import "server-only";
 import { addDays, daysBetween, todayISO } from "./format";
 import type { Query, Store, TableName } from "./store/types";
 import type {
+  AlertContact,
   AlertRow,
+  DriveResponse,
+  Drive,
+  Milestone,
+  Project,
   AttendanceRecord,
   Consent,
   FeeAccount,
@@ -32,9 +37,14 @@ export const EDITABLE: Partial<Record<TableName, string[]>> = {
   hr_calls: ["hr_id", "call_date", "activity", "outcome", "remarks"],
   course_modules: ["course_id", "seq", "name", "total_videos"],
   assessments: ["student_id", "module_id", "title", "marks", "max_marks", "taken_on"],
+  assignments: ["course_id", "batch_id", "module_id", "title", "instructions", "due_date", "max_marks"],
+  tpo_interactions: ["tpo_id", "on_date", "mode", "summary", "next_follow_up", "by_name"],
+  alert_contacts: ["role_name", "name", "email", "phone"],
+  project_milestones: ["project_id", "title", "due_date", "done", "done_on"],
+  staff_appraisals: ["staff_id", "period", "rating", "increment_pct", "comments"],
 };
-const NUMERIC = new Set(["registered", "attended", "shortlisted", "selected", "hourly_rate", "hours", "seq", "total_videos", "marks", "max_marks"]);
-const BOOL = new Set(["is_primary", "active"]);
+const NUMERIC = new Set(["registered", "attended", "shortlisted", "selected", "hourly_rate", "hours", "seq", "total_videos", "marks", "max_marks", "rating", "increment_pct"]);
+const BOOL = new Set(["is_primary", "active", "done"]);
 
 /** SLA (hours) and escalation chain per alert kind. */
 export const ALERT_RULES: Record<string, { label: string; owner: string; sla: number; chain: [string, string, string] }> = {
@@ -45,6 +55,7 @@ export const ALERT_RULES: Record<string, { label: string; owner: string; sla: nu
   corporate_payment: { label: "Pending corporate payment", owner: "Finance", sla: 72, chain: ["Finance", "Admin / Manager", "Director"] },
   project_delay: { label: "Project milestone delay", owner: "Projects", sla: 48, chain: ["Projects", "Delivery manager", "Director"] },
   lead_follow_up: { label: "Lead follow-up missed", owner: "Admissions", sla: 24, chain: ["Admissions", "Admin / Manager", "Director"] },
+  placement_no_show: { label: "Placement no-show", owner: "Placement", sla: 48, chain: ["Placement", "Admin / Manager", "Director"] },
 };
 
 export function createCrmRepo(db: Store) {
@@ -142,6 +153,12 @@ export function createCrmRepo(db: Store) {
     async runAlerts() {
       const today = todayISO();
       const now = Date.now();
+      const [responses, drives, milestones, projects] = await Promise.all([
+        db.select<DriveResponse>("drive_responses"),
+        db.select<Drive>("placement_drives"),
+        db.select<Milestone>("project_milestones"),
+        db.select<Project>("projects"),
+      ]);
       const [students, installments, mous, invoices, att, leads, existing] = await Promise.all([
         db.select<Student>("students"),
         db.select<Installment>("installments"),
@@ -193,6 +210,18 @@ export function createCrmRepo(db: Store) {
       for (const l of leads.filter((x) => x.next_follow_up && !["enrolled", "lost"].includes(x.stage) && Date.parse(x.next_follow_up!) < now - 86400_000))
         add("lead_follow_up", l.id, `Lead follow-up missed – ${l.full_name}`, `Follow-up was due ${new Date(l.next_follow_up!).toLocaleDateString("en-IN")}.`);
 
+      // placement no-show (stage marked "No-show" on a drive)
+      for (const r of responses.filter((x) => x.stage === "No-show")) {
+        const s = name.get(r.student_id);
+        const d = drives.find((x) => x.id === r.drive_id);
+        if (s && d) add("placement_no_show", `${r.drive_id}:${r.student_id}`, `Placement no-show – ${s.full_name}`, `Did not attend ${d.company} (${d.job_role}).`);
+      }
+      // project milestones past due and not done
+      for (const m of milestones.filter((x) => !x.done && x.due_date < today)) {
+        const pr = projects.find((x) => x.id === m.project_id);
+        add("project_delay", m.id, `Milestone delayed – ${m.title}`, `${pr?.name ?? "Project"}: due ${m.due_date}, ${daysBetween(m.due_date, today)} days late.`);
+      }
+
       if (fresh.length) await db.insert<AlertRow>("alerts", fresh);
       // escalate
       let escalated = 0;
@@ -201,7 +230,37 @@ export function createCrmRepo(db: Store) {
         await db.update<AlertRow>("alerts", { id: a.id }, { level: a.level + 1, owner_role: rule?.chain[a.level] ?? a.owner_role, due_at: new Date(now + (rule?.sla ?? 48) * 3600_000).toISOString() });
         escalated++;
       }
-      return { created: fresh.length, escalated };
+      const notified = await crm.notifyAlerts().catch(() => 0);
+      return { created: fresh.length, escalated, notified };
+    },
+    /** Emails / WhatsApps the contacts registered for each open alert's current owner, once per level. */
+    async notifyAlerts() {
+      const [open, contacts] = await Promise.all([db.select<AlertRow>("alerts", { eq: { status: "open" } }), db.select<AlertContact>("alert_contacts")]);
+      const m = await import("./messaging");
+      let sent = 0;
+      for (const a of open.filter((x) => (x.notified_level ?? 0) < x.level)) {
+        const to = contacts.filter((c) => c.role_name.toLowerCase() === a.owner_role.toLowerCase());
+        const text = `${a.level > 1 ? `ESCALATION (level ${a.level}): ` : ""}${a.title}\n${a.details ?? ""}\nPlease act in the MasterVLSI ERP › Alerts.`;
+        for (const c of to) {
+          try {
+            if (c.email && m.emailConfigured()) { await m.sendEmail(c.email, `[MasterVLSI alert] ${a.title}`, text); sent++; }
+            const wa = m.waNumber(c.phone);
+            if (wa && m.whatsappConfigured()) { await m.sendWhatsApp(wa, text); sent++; }
+          } catch {
+            /* try next contact */
+          }
+        }
+        await db.update<AlertRow>("alerts", { id: a.id }, { notified_level: a.level });
+      }
+      return sent;
+    },
+    async saveCompanyProfile(p: Record<string, unknown>) {
+      const company = p.company === "enrich" ? "enrich" : "mastervlsi";
+      const keys = ["legal_name", "address", "gstin", "pan", "bank_name", "bank_account", "bank_ifsc", "email", "phone"];
+      const row: Record<string, unknown> = { company };
+      for (const k of keys) row[k] = String(p[k] ?? "").trim() || null;
+      if (!row.legal_name) row.legal_name = company === "enrich" ? "Enrich Silicon" : "MasterVLSI";
+      await db.upsert("company_profiles", [row], "company");
     },
     resolveAlert: (id: string, note: string | null) =>
       db.update<AlertRow>("alerts", { id }, { status: "resolved", resolved_at: new Date().toISOString(), resolved_note: note }),

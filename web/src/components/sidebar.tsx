@@ -2,6 +2,7 @@
 
 import clsx from "clsx";
 import {
+  History,
   ArrowDownUp,
   BellRing,
   Building2,
@@ -105,7 +106,20 @@ const staffNav: Section[] = [
     title: "Administration",
     items: [
       { href: "/access", label: "Security & Access Control", icon: ShieldCheck },
+      { href: "/audit", label: "Audit Log", icon: History },
       { href: "/settings", label: "Settings & Terms", icon: Settings },
+    ],
+  },
+];
+
+const collegeNav: Section[] = [
+  {
+    title: "College portal",
+    items: [
+      { href: "/college", label: "Overview", icon: LayoutDashboard },
+      { href: "/college?tab=students", label: "Students & progress", icon: Users },
+      { href: "/college?tab=drives", label: "Campus drives & placements", icon: Briefcase },
+      { href: "/college?tab=mou", label: "MoU & agreements", icon: FileText },
     ],
   },
 ];
@@ -139,7 +153,7 @@ const studentNav: Section[] = [
 export function Sidebar({ role, name, demo, signOut }: { role: string; name: string; demo: boolean; signOut: () => Promise<void> }) {
   const path = usePathname();
   const [open, setOpen] = useState(false);
-  const nav = role === "student" ? studentNav : staffNav;
+  const nav = role === "student" ? studentNav : role === "college" ? collegeNav : staffNav;
 
   const body = (
     <div className="flex h-full flex-col">

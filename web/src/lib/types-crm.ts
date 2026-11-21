@@ -16,7 +16,7 @@ export interface TpoContact {
 }
 export interface Mou {
   id: string; college_id: string; mou_no?: string | null; agreement_type: string; start_date?: string | null; end_date?: string | null;
-  scope?: string | null; status: "draft" | "review" | "shared" | "active" | "expired"; document_url?: string | null;
+  scope?: string | null; status: "draft" | "review" | "shared" | "active" | "expired"; document_url?: string | null; document_path?: string | null;
 }
 export interface CampusDrive {
   id: string; college_id: string; company: string; job_role?: string | null; drive_date?: string | null; mode?: string | null;
@@ -29,7 +29,7 @@ export interface Project { id: string; client_id?: string | null; name: string; 
 export interface Timesheet { id: string; project_id: string; staff_id: string; work_date: string; hours: number; note?: string | null }
 export interface Invoice {
   id: string; invoice_no: string; company: Company; client_id?: string | null; issue_date: string; description?: string | null;
-  amount: number; gst_pct: number; status: "unpaid" | "paid" | "cancelled"; paid_on?: string | null;
+  amount: number; gst_pct: number; tds_pct?: number; status: "unpaid" | "paid" | "cancelled"; paid_on?: string | null;
 }
 
 export interface Lead {
@@ -63,5 +63,15 @@ export interface Consent { id: string; consent_no: string; student_id: string; k
 
 export interface AlertRow {
   id: string; kind: string; ref_id: string; title: string; details?: string | null; owner_role: string; level: number;
-  status: "open" | "resolved"; due_at: string; created_at: string; resolved_at?: string | null; resolved_note?: string | null;
+  status: "open" | "resolved"; due_at: string; created_at: string; resolved_at?: string | null; resolved_note?: string | null; notified_level?: number;
 }
+
+export interface AssignmentRow { id: string; course_id?: string | null; batch_id?: string | null; module_id?: string | null; title: string; instructions?: string | null; due_date?: string | null; max_marks: number; created_at?: string }
+export interface Submission { id: string; assignment_id: string; student_id: string; link?: string | null; note?: string | null; submitted_at: string; marks?: number | null; feedback?: string | null; status: "submitted" | "graded" | "resubmit" }
+export interface CollegeLogin { user_id: string; college_id: string; tpo_id?: string | null; created_at?: string }
+export interface TpoInteraction { id: string; tpo_id: string; on_date: string; mode: string; summary: string; next_follow_up?: string | null; by_name?: string | null; created_at?: string }
+export interface AlertContact { id: string; role_name: string; name: string; email?: string | null; phone?: string | null }
+export interface Milestone { id: string; project_id: string; title: string; due_date: string; done: boolean; done_on?: string | null }
+export interface Appraisal { id: string; staff_id: string; period: string; rating: number; increment_pct: number; comments?: string | null; created_at?: string }
+export interface CompanyProfile { company: Company; legal_name: string; address?: string | null; gstin?: string | null; pan?: string | null; bank_name?: string | null; bank_account?: string | null; bank_ifsc?: string | null; email?: string | null; phone?: string | null }
+export interface AuditRow { id: number; at: string; user_id?: string | null; user_email?: string | null; table_name: string; action: string; record_id?: string | null; changes?: Record<string, unknown> | null }

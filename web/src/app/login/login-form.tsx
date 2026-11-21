@@ -16,6 +16,7 @@ export function LoginForm({ demo, students }: { demo: boolean; students: { id: s
           <label className="label" htmlFor="persona">Sign in as</label>
           <select id="persona" name="persona" className="input">
             <option value="admin">Admin (full ERP)</option>
+            <option value="college:col-atme">College TPO — ATME College of Engineering</option>
             {students.map((s) => (
               <option key={s.id} value={`student:${s.id}`}>
                 Student — {s.label}

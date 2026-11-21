@@ -6,8 +6,9 @@ import { Badge, Card, Empty, Field, PageHeader, Stat } from "@/components/ui";
 import { daysBetween, fmtDate, todayISO } from "@/lib/format";
 import { waNumber } from "@/lib/messaging";
 import { getRepo } from "@/lib/server";
-import type { CampusDrive, College, Mou, TpoContact } from "@/lib/types";
-import { deleteRowAction, saveRowAction } from "../crm-actions";
+import type { CampusDrive, College, Mou, TpoContact, TpoInteraction } from "@/lib/types";
+import { CollegeLoginButton } from "./college-login";
+import { deleteRowAction, saveRowAction, uploadMouAction } from "../crm-actions";
 
 export const metadata = { title: "College management" };
 
@@ -24,6 +25,7 @@ export default async function CollegesPage({ searchParams }: PageProps<"/college
   const tab = typeof sp.tab === "string" ? sp.tab : "master";
   const q = typeof sp.q === "string" ? sp.q.trim().toLowerCase() : "";
   const repo = await getRepo();
+  const interactions = await repo.list<TpoInteraction>("tpo_interactions", { order: { column: "on_date", ascending: false } });
   const [colleges, tpos, mous, drives, students] = await Promise.all([
     repo.list<College>("colleges", { order: { column: "name" } }),
     repo.list<TpoContact>("tpo_contacts", { order: { column: "name" } }),
@@ -160,7 +162,11 @@ export default async function CollegesPage({ searchParams }: PageProps<"/college
                   <td className="text-xs">{t.email}</td>
                   <td className="text-xs">{t.next_follow_up ? fmtDate(t.next_follow_up) : "—"}</td>
                   <td><Badge tone={t.active ? "green" : "slate"}>{t.active ? "Active" : "Inactive"}</Badge></td>
-                  <td><form action={deleteRowAction.bind(null, "tpo_contacts", t.id)}><button className="text-xs text-muted hover:text-brand">Delete</button></form></td>
+                  <td className="whitespace-nowrap">
+                    <Link href={`/colleges?tab=tpo&tpo=${t.id}`} className="text-xs text-brand hover:underline">History ({interactions.filter((i) => i.tpo_id === t.id).length})</Link>
+                    {" · "}<CollegeLoginButton tpoId={t.id} />
+                    {" · "}<form action={deleteRowAction.bind(null, "tpo_contacts", t.id)} className="inline"><button className="text-xs text-muted hover:text-brand">Delete</button></form>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -179,6 +185,31 @@ export default async function CollegesPage({ searchParams }: PageProps<"/college
         </Card>
       )}
 
+      {tab === "tpo" && (() => {
+        const t = tpos.find((x) => x.id === sp.tpo) ?? tpos[0];
+        if (!t) return null;
+        const hist = interactions.filter((i) => i.tpo_id === t.id);
+        return (
+          <Card title={`Interaction history – ${t.name} (${cname.get(t.college_id)})`} className="mt-5" bodyClass="p-0 overflow-x-auto">
+            <form action={saveRowAction.bind(null, "tpo_interactions")} className="flex flex-wrap items-center gap-2 border-b border-line p-3">
+              <input type="hidden" name="tpo_id" value={t.id} />
+              <I name="on_date" type="date" value={todayISO()} placeholder="Date" w="w-36" />
+              <select name="mode" aria-label="Mode" className="input w-auto py-1.5"><option value="call">Call</option><option value="visit">Campus visit</option><option value="email">Email</option><option value="whatsapp">WhatsApp</option><option value="meeting">Meeting</option></select>
+              <I name="summary" required placeholder="What was discussed?" w="min-w-56 flex-1" />
+              <I name="next_follow_up" type="date" placeholder="Next follow-up" w="w-36" />
+              <Save label="+ Log interaction" />
+            </form>
+            <table className="table">
+              <thead><tr><th>Date</th><th>Mode</th><th>Summary</th><th>Next follow-up</th><th>By</th></tr></thead>
+              <tbody>
+                {hist.map((h) => <tr key={h.id}><td className="whitespace-nowrap">{fmtDate(h.on_date)}</td><td className="capitalize">{h.mode}</td><td className="text-sm">{h.summary}</td><td>{fmtDate(h.next_follow_up)}</td><td className="text-xs">{h.by_name ?? "—"}</td></tr>)}
+                {!hist.length && <tr><td colSpan={5} className="text-center text-muted">No interactions logged yet.</td></tr>}
+              </tbody>
+            </table>
+          </Card>
+        );
+      })()}
+
       {tab === "mou" && (
         <Card title="MoU & Agreement List" bodyClass="p-0 overflow-x-auto">
           <table className="table">
@@ -190,7 +221,13 @@ export default async function CollegesPage({ searchParams }: PageProps<"/college
                   <tr key={m.id}>
                     <td>{k + 1}</td><td className="font-medium">{cname.get(m.college_id)}</td><td className="text-xs">{m.agreement_type}</td><td className="font-mono text-xs">{m.mou_no}</td>
                     <td>{fmtDate(m.start_date)}</td><td>{fmtDate(m.end_date)}</td><td><Badge tone={tone}>{label}</Badge></td>
-                    <td>{m.document_url ? <a href={m.document_url} target="_blank" rel="noreferrer" className="text-xs text-brand hover:underline"><FileText size={12} className="inline" /> View</a> : "—"}</td>
+                    <td className="whitespace-nowrap">
+                      {m.document_path ? <a href={`/api/mou/${m.id}`} target="_blank" rel="noreferrer" className="text-xs text-brand hover:underline"><FileText size={12} className="inline" /> Signed copy</a> : m.document_url ? <a href={m.document_url} target="_blank" rel="noreferrer" className="text-xs text-brand hover:underline"><FileText size={12} className="inline" /> Link</a> : null}
+                      <form action={uploadMouAction.bind(null, m.id)} className="mt-1 flex items-center gap-1">
+                        <input type="file" name="file" required accept=".pdf,image/*,.doc,.docx" aria-label="Signed MoU file" className="w-36 text-[10px]" />
+                        <button className="text-[11px] text-brand hover:underline">Upload</button>
+                      </form>
+                    </td>
                     <td><form action={deleteRowAction.bind(null, "mous", m.id)}><button className="text-xs text-muted hover:text-brand">Delete</button></form></td>
                   </tr>
                 );

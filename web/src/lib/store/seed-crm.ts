@@ -1,6 +1,15 @@
 import { addDays } from "../format";
 import type {
+  AlertContact,
   AlertRow,
+  Appraisal,
+  AssignmentRow,
+  AuditRow,
+  CollegeLogin,
+  CompanyProfile,
+  Milestone,
+  Submission,
+  TpoInteraction,
   AmbassadorActivity,
   Assessment,
   Branch,
@@ -48,6 +57,15 @@ export interface CrmTables {
   terms: TermsDoc[];
   consents: Consent[];
   alerts: AlertRow[];
+  assignments: AssignmentRow[];
+  assignment_submissions: Submission[];
+  college_logins: CollegeLogin[];
+  tpo_interactions: TpoInteraction[];
+  alert_contacts: AlertContact[];
+  project_milestones: Milestone[];
+  staff_appraisals: Appraisal[];
+  company_profiles: CompanyProfile[];
+  audit_log: AuditRow[];
 }
 
 /** The 17 placement terms (summarised); admins can edit the wording in Settings › Terms. */
@@ -228,5 +246,38 @@ export function buildCrmSeed(today: string, r: () => number, students: Student[]
   return {
     branches, colleges, tpo_contacts, mous, campus_drives, clients, projects, timesheets, invoices, leads, lead_activities,
     hr_contacts, hr_company_history, hr_calls, ambassador_activities, course_modules, module_progress, assessments, terms, consents, alerts: [],
+    assignments: [
+      { id: "asg-1", course_id: "c-dv", batch_id: null, module_id: "cm-c-dv-3", title: "SV: constrained-random packet generator", instructions: "Write a class with constraints for a packet (len 4–64, crc valid). Share a GitHub/EDA Playground link.", due_date: addDays(today, 3), max_marks: 10, created_at: ts(-4) },
+      { id: "asg-2", course_id: "c-dv", batch_id: null, module_id: "cm-c-dv-4", title: "UVM: APB agent (driver + monitor)", instructions: "Build an APB agent and a simple test.", due_date: addDays(today, 10), max_marks: 20, created_at: ts(-1) },
+      { id: "asg-3", course_id: "c-pd", batch_id: null, module_id: null, title: "Floorplan a 2-macro block", instructions: "Upload screenshots + utilisation report.", due_date: addDays(today, 5), max_marks: 10, created_at: ts(-2) },
+    ],
+    assignment_submissions: students.filter((s) => s.course_id === "c-dv").slice(0, 4).map((s, k) => ({
+      id: `sub-${k}`, assignment_id: "asg-1", student_id: s.id, link: `https://edaplayground.example/x/${k}`, note: null, submitted_at: ts(-1 - k),
+      marks: k < 2 ? 8 + k : null, feedback: k < 2 ? "Good constraints; add coverage next time." : null, status: (k < 2 ? "graded" : "submitted") as Submission["status"],
+    })),
+    college_logins: [],
+    tpo_interactions: [
+      { id: "ti-1", tpo_id: "tpo-1", on_date: addDays(today, -4), mode: "call", summary: "Discussed next DV campus drive and 2026 batch strength.", next_follow_up: addDays(today, 3), by_name: "Sowmya Rao", created_at: ts(-4) },
+      { id: "ti-2", tpo_id: "tpo-1", on_date: addDays(today, -18), mode: "visit", summary: "Visited campus; seminar for 3rd-year ECE students.", next_follow_up: null, by_name: "Rakesh Kumar", created_at: ts(-18) },
+      { id: "ti-3", tpo_id: "tpo-3", on_date: addDays(today, -20), mode: "email", summary: "Shared MoU renewal draft.", next_follow_up: addDays(today, 1), by_name: "Sowmya Rao", created_at: ts(-20) },
+    ],
+    alert_contacts: [
+      { id: "ac-1", role_name: "Finance", name: "Accounts desk", email: "accounts@mastervlsi.example", phone: "9900000201" },
+      { id: "ac-2", role_name: "Admin / Manager", name: "Operations manager", email: "ops@mastervlsi.example", phone: "9900000202" },
+      { id: "ac-3", role_name: "Director", name: "Director", email: "director@mastervlsi.example", phone: "9900000203" },
+    ],
+    project_milestones: [
+      { id: "ms-1", project_id: "pr-1", title: "Testbench architecture sign-off", due_date: addDays(today, -20), done: true, done_on: addDays(today, -21) },
+      { id: "ms-2", project_id: "pr-1", title: "Coverage closure 80%", due_date: addDays(today, -3), done: false, done_on: null },
+      { id: "ms-3", project_id: "pr-1", title: "Regression sign-off", due_date: addDays(today, 40), done: false, done_on: null },
+    ],
+    staff_appraisals: [
+      { id: "ap-1", staff_id: "st-1", period: "FY 2025-26", rating: 4, increment_pct: 10, comments: "Strong DV delivery; mentor more juniors.", created_at: ts(-60) },
+    ],
+    company_profiles: [
+      { company: "mastervlsi", legal_name: "MasterVLSI Training Institute", address: "Hyderabad, Telangana", gstin: "36AAAAA0000A1Z5", pan: "AAAAA0000A", bank_name: "HDFC Bank", bank_account: "XXXXXX1234", bank_ifsc: "HDFC0000001", email: "accounts@mastervlsi.example", phone: "9900000300" },
+      { company: "enrich", legal_name: "Enrich Silicon Pvt. Ltd.", address: "Bengaluru, Karnataka", gstin: "29BBBBB1111B1Z6", pan: "BBBBB1111B", bank_name: "ICICI Bank", bank_account: "XXXXXX5678", bank_ifsc: "ICIC0000002", email: "billing@enrichsilicon.example", phone: "9900000301" },
+    ],
+    audit_log: [],
   };
 }

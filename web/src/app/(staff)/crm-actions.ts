@@ -154,7 +154,7 @@ export async function saveProgressAction(studentId: string, moduleId: string, fo
 export async function addInvoiceAction(form: FormData) {
   await requireStaff();
   const i = z
-    .object({ company: z.enum(["mastervlsi", "enrich"]), client_id: z.string().min(1), issue_date: z.string().min(10), description: z.string().optional(), amount: z.coerce.number().positive(), gst_pct: z.coerce.number().min(0).max(28) })
+    .object({ company: z.enum(["mastervlsi", "enrich"]), client_id: z.string().min(1), issue_date: z.string().min(10), description: z.string().optional(), amount: z.coerce.number().positive(), gst_pct: z.coerce.number().min(0).max(28), tds_pct: z.coerce.number().min(0).max(30).default(0) })
     .parse(Object.fromEntries(form));
   const repo = await getRepo();
   const { getStore } = await import("@/lib/session");
@@ -169,7 +169,7 @@ export async function markInvoicePaidAction(id: string) {
   if (!inv || inv.status === "paid") return;
   const { getStore } = await import("@/lib/session");
   await (await getStore()).update("invoices", { id }, { status: "paid", paid_on: todayISO() });
-  await repo.addFinanceEntry({ kind: "income", category: "Client invoice", amount: Number(inv.amount) * (1 + Number(inv.gst_pct) / 100), entry_date: todayISO(), vendor_id: null, reference: inv.invoice_no, note: inv.description ?? null, company: inv.company } as Parameters<typeof repo.addFinanceEntry>[0]);
+  await repo.addFinanceEntry({ kind: "income", category: "Client invoice", amount: Number(inv.amount) * (1 + Number(inv.gst_pct) / 100 - Number(inv.tds_pct ?? 0) / 100), entry_date: todayISO(), vendor_id: null, reference: inv.invoice_no, note: inv.description ?? null, company: inv.company } as Parameters<typeof repo.addFinanceEntry>[0]);
   refresh();
 }
 
@@ -234,7 +234,11 @@ export async function importCsvAction(_: unknown, form: FormData): Promise<Impor
     const name = r.full_name || r.name;
     if (!name) { errors.push(`Line ${line}: name is missing`); continue; }
     try {
-      if (kind === "leads") {
+      if (kind === "colleges") {
+        await repo.save("colleges", { name, code: r.code, city: r.city, state: r.state, affiliation: r.affiliation, college_type: r.type || r.college_type, status: ["partner", "prospect", "inactive"].includes(r.status) ? r.status : "partner" });
+      } else if (kind === "hr_contacts") {
+        await repo.save("hr_contacts", { full_name: name, designation: r.designation, department: r.department, phone: r.phone, email: r.email, linkedin: r.linkedin, city: r.city, current_company: r.company || r.current_company, company_type: r.company_type });
+      } else if (kind === "leads") {
         await repo.createLead({ full_name: name, phone: r.phone || null, email: r.email || null, city: r.city || null, source: r.source || "Import", course_code: r.course || r.course_code || null, remarks: r.remarks || null });
       } else {
         const course = courses.find((c) => c.code.toLowerCase() === (r.course || r.course_code || "").toLowerCase()) ?? courses[0];
@@ -257,3 +261,72 @@ export async function importCsvAction(_: unknown, form: FormData): Promise<Impor
   return { ok: created > 0, message: `Imported ${created} of ${rows.length} ${kind}.`, errors: errors.slice(0, 20) };
 }
 
+
+// ---- MoU signed copies ------------------------------------------------------------------------
+export async function uploadMouAction(mouId: string, form: FormData) {
+  await requireStaff();
+  const file = form.get("file");
+  const st = await import("@/lib/storage");
+  if (!(file instanceof File) || !file.size) throw new Error("Choose the signed MoU file");
+  if (file.size > st.MAX_UPLOAD_BYTES) throw new Error("Files must be 5 MB or smaller");
+  if (!st.ALLOWED_TYPES[file.type]) throw new Error("Upload a PDF, image or Word file");
+  const path = `mou/${mouId}/${Date.now()}-${st.safeFileName(file.name)}`;
+  await st.putFile(path, file);
+  const { getStore } = await import("@/lib/session");
+  await (await getStore()).update("mous", { id: mouId }, { document_path: path });
+  refresh();
+}
+
+// ---- college (TPO) portal logins --------------------------------------------------------------
+export type LoginResult = { ok: true; email: string; password: string } | { ok: false; message: string };
+
+export async function collegeLoginAction(tpoId: string): Promise<LoginResult> {
+  const me = await requireStaff();
+  if (me.role !== "admin" && me.role !== "super_admin") return { ok: false, message: "Only admins can create college logins." };
+  const { isSupabaseConfigured, supabaseAdmin } = await import("@/lib/supabase/clients");
+  if (!isSupabaseConfigured()) return { ok: false, message: "Demo mode: sign in as the TPO from the login page persona list." };
+  const repo = await getRepo();
+  const tpo = await repo.one<{ id: string; college_id: string; name: string; email?: string | null }>("tpo_contacts", tpoId);
+  const email = tpo?.email?.trim().toLowerCase();
+  if (!tpo || !email) return { ok: false, message: "Add the TPO's email first." };
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+  const password = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => alphabet[b % alphabet.length]).join("");
+  const admin = supabaseAdmin();
+  const { data: existing } = await admin.from("college_logins").select("user_id").eq("tpo_id", tpoId).maybeSingle();
+  let userId = existing?.user_id as string | undefined;
+  if (userId) {
+    const { error } = await admin.auth.admin.updateUserById(userId, { password });
+    if (error) return { ok: false, message: error.message };
+  } else {
+    const { data, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { full_name: tpo.name } });
+    if (error || !data.user) return { ok: false, message: error?.message ?? "Could not create the login" };
+    userId = data.user.id;
+    await admin.from("profiles").update({ role: "college", full_name: tpo.name }).eq("id", userId);
+    await admin.from("college_logins").insert({ user_id: userId, college_id: tpo.college_id, tpo_id: tpoId });
+  }
+  return { ok: true, email, password };
+}
+
+// ---- company legal profiles ---------------------------------------------------------------------
+export async function saveCompanyProfileAction(form: FormData) {
+  await requireStaff();
+  await (await getRepo()).saveCompanyProfile(Object.fromEntries(form));
+  refresh();
+}
+
+// ---- assignments: grading ------------------------------------------------------------------------
+export async function gradeSubmissionAction(id: string, form: FormData) {
+  await requireStaff();
+  const marks = String(form.get("marks") ?? "");
+  const status = form.get("status") === "resubmit" ? "resubmit" : "graded";
+  const { getStore } = await import("@/lib/session");
+  await (await getStore()).update("assignment_submissions", { id }, { marks: marks === "" ? null : Number(marks), feedback: String(form.get("feedback") || "") || null, status });
+  refresh();
+}
+
+export async function toggleMilestoneAction(id: string, done: boolean) {
+  await requireStaff();
+  const { getStore } = await import("@/lib/session");
+  await (await getStore()).update("project_milestones", { id }, { done, done_on: done ? todayISO() : null });
+  refresh();
+}

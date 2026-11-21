@@ -9,7 +9,7 @@ const csv = (rows: unknown[][]) => "﻿" + rows.map((r) => r.map(esc).join(","))
 /** CSV exports for the Reports page (open directly in Excel): students, fees, placements, finance. */
 export async function GET(_: Request, { params }: { params: Promise<{ report: string }> }) {
   const s = await getSession();
-  if (!s || s.role === "student") return new Response("Forbidden", { status: 403 });
+  if (!s || !["super_admin", "admin", "staff"].includes(s.role)) return new Response("Forbidden", { status: 403 });
   const { report } = await params;
   const repo = await getRepo();
   let rows: unknown[][];

@@ -139,3 +139,17 @@ export async function requestPlacementGroupAction() {
   await repo.updateStudent(s.studentId, { placement_group: "requested" });
   revalidatePath("/portal", "layout");
 }
+
+// ---- assignments: student submits a link ------------------------------------------------------
+export async function submitAssignmentAction(assignmentId: string, form: FormData) {
+  const s = await requireStudent();
+  const link = String(form.get("link") || "").trim();
+  const note = String(form.get("note") || "").trim();
+  if (!/^https?:\/\/\S+$/.test(link)) throw new Error("Paste a link to your work (GitHub, EDA Playground, Drive…)");
+  const repo = getServiceRepo();
+  const [a, p] = await Promise.all([repo.one<{ course_id?: string | null }>("assignments", assignmentId), repo.profile(s.studentId)]);
+  if (!a || !p || (a.course_id && a.course_id !== p.student.course_id)) throw new Error("Assignment not found");
+  const { getServiceStore } = await import("@/lib/session");
+  await getServiceStore().upsert("assignment_submissions", [{ assignment_id: assignmentId, student_id: s.studentId, link: link.slice(0, 500), note: note.slice(0, 500) || null, submitted_at: new Date().toISOString(), status: "submitted" }], "assignment_id,student_id");
+  revalidatePath("/portal/learning");
+}

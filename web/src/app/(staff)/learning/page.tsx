@@ -4,8 +4,9 @@ import { LearningView, learningSummary } from "@/components/learning-view";
 import { Card, PageHeader, Progress } from "@/components/ui";
 import { fmtDate } from "@/lib/format";
 import { getRepo } from "@/lib/server";
-import type { Assessment, CourseModule, ModuleProgress } from "@/lib/types";
-import { deleteRowAction, saveProgressAction, saveRowAction } from "../crm-actions";
+import type { Assessment, AssignmentRow, CourseModule, ModuleProgress, Submission } from "@/lib/types";
+import { Badge } from "@/components/ui";
+import { deleteRowAction, gradeSubmissionAction, saveProgressAction, saveRowAction } from "../crm-actions";
 
 export const metadata = { title: "Learning & assessments" };
 
@@ -31,12 +32,12 @@ export default async function LearningPage({ searchParams }: PageProps<"/learnin
     <>
       <PageHeader title="Student Learning & Assessment" subtitle="Track learning progress, video completion, module tests and scores for every student." />
       <nav className="mb-4 flex gap-4 border-b border-line text-[13px]">
-        {[["student", "Activity Learning"], ["batch", "Progress Tracker (batch)"], ["modules", "Modules setup"]].map(([k, l]) => (
+        {[["student", "Activity Learning"], ["batch", "Progress Tracker (batch)"], ["assignments", "Assignments"], ["modules", "Modules setup"]].map(([k, l]) => (
           <Link key={k} href={`/learning?tab=${k}${batch ? `&batch=${batch}` : ""}`} className={`-mb-px border-b-2 pb-2 ${tab === k ? "border-brand font-medium text-brand" : "border-transparent text-muted hover:text-brand"}`}>{l}</Link>
         ))}
       </nav>
 
-      {tab !== "modules" && (
+      {tab !== "modules" && tab !== "assignments" && (
         <form className="mb-4 flex flex-wrap gap-2">
           <input type="hidden" name="tab" value={tab} />
           <select name="batch" defaultValue={batch} aria-label="Batch" className="input w-auto"><option value="">All batches</option>{batches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
@@ -91,6 +92,10 @@ export default async function LearningPage({ searchParams }: PageProps<"/learnin
         </Card>
       )}
 
+      {tab === "assignments" && (
+        <AssignmentsTab courses={courses} batches={batches} mods={mods} students={students} assignments={await repo.list<AssignmentRow>("assignments", { order: { column: "due_date", ascending: false } })} subs={await repo.list<Submission>("assignment_submissions", { order: { column: "submitted_at", ascending: false } })} />
+      )}
+
       {tab === "modules" && (
         <div className="grid gap-5 xl:grid-cols-2">
           {courses.map((c) => (
@@ -118,5 +123,58 @@ export default async function LearningPage({ searchParams }: PageProps<"/learnin
         </div>
       )}
     </>
+  );
+}
+
+function AssignmentsTab({ courses, batches, mods, students, assignments, subs }: {
+  courses: { id: string; code: string }[]; batches: { id: string; name: string }[]; mods: CourseModule[];
+  students: { id: string; full_name: string; course_id?: string | null }[]; assignments: AssignmentRow[]; subs: Submission[];
+}) {
+  const sname = new Map(students.map((s) => [s.id, s.full_name]));
+  return (
+    <div className="space-y-5">
+      <Card title="Create assignment">
+        <form action={saveRowAction.bind(null, "assignments")} className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <select name="course_id" required aria-label="Course" className="input py-1.5">{courses.map((c) => <option key={c.id} value={c.id}>{c.code}</option>)}</select>
+          <select name="batch_id" aria-label="Batch" className="input py-1.5"><option value="">All batches</option>{batches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
+          <select name="module_id" aria-label="Module" className="input py-1.5"><option value="">No module</option>{mods.map((m) => <option key={m.id} value={m.id}>{courses.find((c) => c.id === m.course_id)?.code} · {m.name}</option>)}</select>
+          <input name="due_date" type="date" aria-label="Due date" className="input py-1.5" />
+          <input name="title" required placeholder="Title" aria-label="Title" className="input py-1.5 sm:col-span-2" />
+          <input name="max_marks" type="number" defaultValue={10} aria-label="Max marks" className="input py-1.5" />
+          <button className="btn-primary">+ Create</button>
+          <textarea name="instructions" rows={2} placeholder="Instructions" aria-label="Instructions" className="input sm:col-span-2 lg:col-span-4" />
+        </form>
+      </Card>
+      {assignments.map((a) => {
+        const list = subs.filter((s) => s.assignment_id === a.id);
+        const expected = students.filter((s) => !a.course_id || s.course_id === a.course_id).length;
+        return (
+          <Card key={a.id} title={`${a.title} · due ${fmtDate(a.due_date)} · ${list.length}/${expected} submitted`} bodyClass="p-0 overflow-x-auto">
+            <table className="table">
+              <thead><tr><th>Student</th><th>Submitted</th><th>Work</th><th>Status</th><th>Grade</th></tr></thead>
+              <tbody>
+                {list.map((s) => (
+                  <tr key={s.id}>
+                    <td className="font-medium">{sname.get(s.student_id)}</td>
+                    <td className="whitespace-nowrap">{fmtDate(s.submitted_at)}</td>
+                    <td>{s.link ? <a href={s.link} target="_blank" rel="noreferrer" className="text-xs text-brand hover:underline">Open</a> : "—"}</td>
+                    <td><Badge tone={s.status === "graded" ? "green" : s.status === "resubmit" ? "red" : "blue"}>{s.status}{s.marks != null ? ` · ${s.marks}/${a.max_marks}` : ""}</Badge></td>
+                    <td>
+                      <form action={gradeSubmissionAction.bind(null, s.id)} className="flex items-center gap-1">
+                        <input name="marks" type="number" step="0.5" min={0} max={a.max_marks} defaultValue={s.marks ?? ""} aria-label="Marks" className="input w-16 py-1" />
+                        <input name="feedback" defaultValue={s.feedback ?? ""} placeholder="Feedback" aria-label="Feedback" className="input w-44 py-1" />
+                        <select name="status" defaultValue={s.status === "resubmit" ? "resubmit" : "graded"} aria-label="Result" className="input w-auto py-1"><option value="graded">Graded</option><option value="resubmit">Resubmit</option></select>
+                        <button className="btn-navy py-1 text-xs">Save</button>
+                      </form>
+                    </td>
+                  </tr>
+                ))}
+                {!list.length && <tr><td colSpan={5} className="text-center text-muted">No submissions yet.</td></tr>}
+              </tbody>
+            </table>
+          </Card>
+        );
+      })}
+    </div>
   );
 }

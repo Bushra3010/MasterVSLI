@@ -16,6 +16,7 @@ export interface Session {
   email?: string;
   userId?: string;
   studentId?: string;
+  collegeId?: string;
   demo: boolean;
 }
 
@@ -24,6 +25,11 @@ export const getSession = cache(async (): Promise<Session | null> => {
     const v = (await cookies()).get(DEMO_COOKIE)?.value;
     if (!v) return null;
     if (v === "admin") return { role: "super_admin", name: "Demo Admin", demo: true };
+    if (v.startsWith("college:")) {
+      const collegeId = v.slice(8);
+      const [c] = await new DemoStore().select<{ name: string }>("colleges", { eq: { id: collegeId } });
+      return c ? { role: "college", name: `${c.name} (TPO)`, collegeId, demo: true } : null;
+    }
     if (v.startsWith("student:")) {
       const studentId = v.slice(8);
       const [s] = await new DemoStore().select<{ full_name: string }>("students", { eq: { id: studentId } });
@@ -38,8 +44,14 @@ export const getSession = cache(async (): Promise<Session | null> => {
     db.from("profiles").select("role, full_name").eq("id", data.user.id).maybeSingle(),
     db.from("students").select("id, full_name").eq("user_id", data.user.id).maybeSingle(),
   ]);
-  const role: Role = ["super_admin", "admin", "staff"].includes(profile?.role) ? (profile!.role as Role) : "student";
+  const role: Role = ["super_admin", "admin", "staff", "college"].includes(profile?.role) ? (profile!.role as Role) : "student";
+  let collegeId: string | undefined;
+  if (role === "college") {
+    const { data: link } = await supabaseAdmin().from("college_logins").select("college_id").eq("user_id", data.user.id).maybeSingle();
+    collegeId = link?.college_id ?? undefined;
+  }
   return {
+    collegeId,
     role,
     name: profile?.full_name || student?.full_name || data.user.email || "User",
     email: data.user.email,
@@ -53,13 +65,23 @@ export async function requireStaff() {
   const s = await getSession();
   if (!s) redirect("/login");
   if (s.role === "student") redirect("/portal");
+  if (s.role === "college") redirect("/college");
   return s;
+}
+
+/** College (TPO) portal: only their own college's students, drives and reports. */
+export async function requireCollege() {
+  const s = await getSession();
+  if (!s) redirect("/login");
+  if (s.role !== "college") redirect(s.role === "student" ? "/portal" : "/dashboard");
+  if (!s.collegeId) redirect("/no-access");
+  return s as Session & { collegeId: string };
 }
 
 export async function requireStudent() {
   const s = await getSession();
   if (!s) redirect("/login");
-  if (s.role !== "student") redirect("/dashboard");
+  if (s.role !== "student") redirect(s.role === "college" ? "/college" : "/dashboard");
   // Signed in, but no student record linked to this login (and not staff): avoid a portal↔dashboard loop.
   if (!s.studentId) redirect("/no-access");
   return s as Session & { studentId: string };

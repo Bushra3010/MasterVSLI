@@ -3,13 +3,13 @@
 import { useActionState } from "react";
 import { importCsvAction } from "../crm-actions";
 
-export function ImportForm({ kind }: { kind: "leads" | "students" }) {
+export function ImportForm({ kind }: { kind: "leads" | "students" | "colleges" | "hr_contacts" }) {
   const [state, action, pending] = useActionState(importCsvAction, null);
   return (
     <form action={action} className="space-y-2">
       <input type="hidden" name="kind" value={kind} />
       <input type="file" name="file" accept=".csv,text/csv" required aria-label={`${kind} CSV file`} className="input" />
-      <button disabled={pending} className="btn-primary w-full">{pending ? "Importing…" : `Import ${kind}`}</button>
+      <button disabled={pending} className="btn-primary w-full">{pending ? "Importing…" : `Import ${kind.replace("_", " ")}`}</button>
       {state && (
         <div className={`rounded-[5px] p-2 text-xs ${state.ok ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"}`}>
           {state.message}
