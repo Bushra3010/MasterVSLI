@@ -85,13 +85,7 @@ function LetterBody({ letter: l, student: s, course: c, staff: st, qr, verifyUrl
   );
   const Header = (
     <div className="flex items-center justify-between border-b-4 border-brand pb-3">
-      <div className="flex items-center gap-3">
-        <Image src="/logo.png" alt="" width={56} height={56} />
-        <div>
-          <div className="text-xl font-bold text-navy">Master<span className="text-brand">VLSI</span></div>
-          <div className="text-[11px] text-muted">{INSTITUTE.tagline}</div>
-        </div>
-      </div>
+      <Image src="/logo-full.svg" alt="MasterVLSI — Leader In Semiconductor Industry" width={240} height={60} unoptimized priority className="h-14 w-auto" />
       <div className="text-right text-[11px] text-muted">{INSTITUTE.address}<br />{INSTITUTE.email} · {INSTITUTE.web}</div>
     </div>
   );
@@ -99,7 +93,7 @@ function LetterBody({ letter: l, student: s, course: c, staff: st, qr, verifyUrl
   if (l.template === "training_certificate")
     return (
       <div className="mx-auto aspect-[1.414] w-full max-w-4xl border-[10px] border-double border-amber-500 bg-gradient-to-br from-white to-amber-50 p-10 text-center">
-        <Image src="/logo.png" alt="" width={72} height={72} className="mx-auto" />
+        <Image src="/logo-full.svg" alt="MasterVLSI — Leader In Semiconductor Industry" width={320} height={80} unoptimized priority className="mx-auto h-20 w-auto" />
         <div className="mt-2 text-4xl font-serif tracking-wide text-navy">Certificate of Completion</div>
         <div className="mt-6 text-sm text-muted">This is to certify that</div>
         <div className="mt-2 text-3xl font-semibold text-brand">{name}</div>
@@ -115,7 +109,7 @@ function LetterBody({ letter: l, student: s, course: c, staff: st, qr, verifyUrl
     return (
       <div className="mx-auto w-[340px] overflow-hidden rounded-2xl border border-line bg-white shadow-lg">
         <div className="flex items-center gap-2 bg-navy p-3 text-white">
-          <Image src="/logo.png" alt="" width={36} height={36} className="rounded bg-white" />
+          <Image src="/logo-mark.svg" alt="MasterVLSI" width={36} height={36} unoptimized className="rounded" />
           <div className="font-semibold">Master<span className="text-red-300">VLSI</span></div>
           <div className="ml-auto text-[10px] uppercase opacity-80">{l.template === "student_id_card" ? "Student ID" : "Visiting card"}</div>
         </div>

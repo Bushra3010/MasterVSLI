@@ -20,7 +20,7 @@ export function daysBetween(fromISO: string, toISO: string) {
 }
 
 export const inr = (n: number) =>
-  "₹" + Math.round(n).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+  (Math.round(n) < 0 ? "−₹" : "₹") + Math.abs(Math.round(n)).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 
 export function fmtDate(iso?: string | null) {
   if (!iso) return "—";

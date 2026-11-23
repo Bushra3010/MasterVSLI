@@ -69,6 +69,13 @@ export async function requireStaff() {
   return s;
 }
 
+/** Finance & fund flow: super admins and admins only. */
+export async function requireFinance() {
+  const s = await requireStaff();
+  if (s.role !== "super_admin" && s.role !== "admin") redirect("/dashboard?denied=finance");
+  return s;
+}
+
 /** College (TPO) portal: only their own college's students, drives and reports. */
 export async function requireCollege() {
   const s = await getSession();

@@ -2,8 +2,8 @@
   "name": "mastervlsi-cron",
   "private": true,
   "scripts": {
-    "dev": "wrangler dev --test-scheduled",
-    "deploy": "wrangler deploy"
+    "dev": "export XDG_CONFIG_HOME=$HOME/.config/mastervlsi; wrangler dev --test-scheduled",
+    "deploy": "export XDG_CONFIG_HOME=$HOME/.config/mastervlsi; wrangler deploy"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20251101.0",

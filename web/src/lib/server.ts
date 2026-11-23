@@ -15,3 +15,14 @@ export const getServiceRepo = () => createRepo(getServiceStore());
  */
 export const getStudentReadRepo = async () =>
   isSupabaseConfigured() && process.env.SUPABASE_SERVICE_ROLE_KEY ? getServiceRepo() : getRepo();
+
+/** Finance repo acting as the signed-in user (database restricts finance tables to admins). */
+export const getFinance = async () => {
+  const { createFinanceRepo } = await import("./finance");
+  return createFinanceRepo(await getStore());
+};
+/** Finance repo with service rights — daily job only. */
+export const getServiceFinance = async () => {
+  const { createFinanceRepo } = await import("./finance");
+  return createFinanceRepo(getServiceStore());
+};

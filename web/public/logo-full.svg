@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 190" role="img" aria-label="MasterVLSI — Leader In Semiconductor Industry">
+  <title>MasterVLSI</title>
+  <!-- red swoosh -->
+  <path d="M14 84 C 30 96, 44 112, 54 132 C 78 78, 118 36, 176 10 C 128 44, 92 84, 62 150 C 50 124, 34 104, 14 84 Z" fill="#c8102e"/>
+  <!-- wordmark -->
+  <text x="48" y="122" textLength="696" lengthAdjust="spacingAndGlyphs"
+        font-family="Georgia, 'Times New Roman', Times, serif" font-size="104" font-weight="700" fill="#141414">MASTERVLSI</text>
+  <text x="52" y="172" textLength="688" lengthAdjust="spacingAndGlyphs"
+        font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-size="38" fill="#1f2a44">Leader In Semiconductor Industry</text>
+</svg>

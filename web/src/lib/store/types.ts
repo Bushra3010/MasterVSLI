@@ -61,7 +61,25 @@ export type TableName =
   | "project_milestones"
   | "staff_appraisals"
   | "company_profiles"
-  | "audit_log";
+  | "audit_log"
+  // finance & fund flow
+  | "fin_accounts"
+  | "properties"
+  | "property_units"
+  | "tenants"
+  | "tenancies"
+  | "rent_dues"
+  | "tenant_payments"
+  | "utility_bills"
+  | "maintenance_requests"
+  | "tenant_documents"
+  | "recurring_payments"
+  | "expenses"
+  | "fund_payments"
+  | "payment_sources"
+  | "inter_entity_settlements"
+  | "fund_transfers"
+  | "budgets";
 
 export interface Query {
   eq?: Record<string, string | number | boolean | null>;

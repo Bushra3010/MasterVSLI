@@ -399,6 +399,7 @@ export interface FinanceEntry {
   reference?: string | null;
   note?: string | null;
   company?: Company;
+  account_id?: string | null;
   created_at?: string;
 }
 export interface MessageRow {

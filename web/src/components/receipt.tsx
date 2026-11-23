@@ -27,13 +27,7 @@ export function Receipt({ data }: { data: NonNullable<Awaited<ReturnType<typeof 
       <div className="no-print mb-4 flex justify-end"><PrintButton /></div>
       <div className="mx-auto max-w-2xl rounded-lg border border-line bg-white p-8 shadow-sm print:border-0 print:shadow-none">
         <div className="flex items-center justify-between border-b-2 border-brand pb-4">
-          <div className="flex items-center gap-3">
-            <Image src="/logo.png" alt="" width={48} height={48} className="rounded" />
-            <div>
-              <div className="text-xl font-bold text-navy">Master<span className="text-brand">VLSI</span></div>
-              <div className="text-xs text-muted">VLSI Training &amp; Placement Institute</div>
-            </div>
-          </div>
+          <Image src="/logo-full.svg" alt="MasterVLSI — Leader In Semiconductor Industry" width={220} height={55} unoptimized priority className="h-14 w-auto" />
           <div className="text-right">
             <div className="text-lg font-semibold text-navy">FEE RECEIPT</div>
             <div className="font-mono text-xs text-muted">{no}</div>

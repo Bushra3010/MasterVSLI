@@ -67,6 +67,9 @@ class Forms(HTMLParser):
             t = a.get("type", "text")
             if t in ("checkbox",):
                 self.cur["fields"].append([a.get("name"), "on" if "checked" in a else None, "checkbox"])
+            elif t == "radio":  # only the checked option is submitted
+                if "checked" in a and a.get("name"):
+                    self.cur["fields"].append([a.get("name"), a.get("value", "on"), "radio"])
             elif t == "file":
                 self.cur["fields"].append([a.get("name"), None, "file"])
             elif t not in ("submit", "button") and a.get("name"):
@@ -258,20 +261,30 @@ check("activate restores access", "Blocked" not in text(prof))
 s, _, raw = http("POST", "/api/webhooks/biometric", "", json.dumps({"punches": [{"device_id": "D1", "user_code": "E2E-BIO-1", "timestamp": f"{TODAY}T04:00:00Z"}]}).encode(), BIO)
 check("biometric punch accepted after activate (custom biometric ID)", b'"ok":true' in raw, raw[:200])
 
-# 8. settings: add staff, edit course, add vendor
-_, _, html = get("/settings", ADMIN)
-f = find_form(html, must=["employee_code"], must_not=["id"])
-submit("/settings", ADMIN, f, {"employee_code": "e2e9", "full_name": "E2E Staff", "designation": "Trainer", "monthly_salary": "50000"})
-_, _, html = get("/settings", ADMIN)
-check("settings: staff added", "E2E9" in html)
-f = find_form(html, must=["code", "fee", "id"])
-submit("/settings", ADMIN, f, {"fee": "31000"})
-_, _, html = get("/settings", ADMIN)
-check("settings: course fee edited", 'value="31000"' in html)
-f = find_form(html, must=["name", "contact_person"], must_not=["id", "parent_id"])
-submit("/settings", ADMIN, f, {"name": "E2E Vendor", "contact_person": "E2E Contact"})
-_, _, html = get("/settings", ADMIN)
-check("settings: vendor added", "E2E Vendor" in html)
+# 8. master data: add staff, edit course, add vendor (forms may live on Settings or their own pages)
+def form_on(paths, must, must_not=()):
+    for p in paths:
+        st, final, html = get(p, ADMIN)
+        if st != 200:
+            continue
+        try:
+            return p, html, find_form(html, must=must, must_not=must_not)
+        except AssertionError:
+            continue
+    raise AssertionError(f"no form with {must} on {paths}")
+
+pg, html, f = form_on(["/hr", "/settings"], ["employee_code", "full_name"], must_not=["id"])
+submit(pg, ADMIN, f, {"employee_code": "e2e9", "full_name": "E2E Staff", "designation": "Trainer", "monthly_salary": "50000"})
+_, _, html = get(pg, ADMIN)
+check(f"staff added ({pg})", "E2E9" in html.upper() and "E2E Staff" in html)
+pg, html, f = form_on(["/courses", "/settings"], ["code", "fee", "id"])
+submit(pg, ADMIN, f, {"fee": "31000"})
+_, _, html = get(pg, ADMIN)
+check(f"course fee edited ({pg})", 'value="31000"' in html)
+pg, html, f = form_on(["/vendors", "/settings"], ["name", "contact_person"], must_not=["id", "parent_id"])
+submit(pg, ADMIN, f, {"name": "E2E Vendor", "contact_person": "E2E Contact"})
+_, _, html = get(pg, ADMIN)
+check(f"vendor added ({pg})", "E2E Vendor" in html)
 
 # 9. letters: staff payslip and student certificate
 _, _, html = get("/documents?template=payslip", ADMIN)
@@ -404,7 +417,7 @@ NEW = f"mvl_demo=student:{new_id}"
 _, _, html = get("/portal", NEW)
 check("expired: portal shows paused notice", "paused" in text(html) and "expired" in text(html).lower())
 _, _, html = get("/portal/drives", NEW)
-check("expired: portal placement applications blocked", "blocked" in text(html).lower())
+check("expired: portal placement applications unavailable", "blocked" in text(html).lower() or "not active" in text(html).lower())
 _, _, html = get("/portal", NEW)
 check("portal notices list the expiry", "has expired" in text(html) or "expires in" in text(html))
 submit(SP, ADMIN, find_form(prof, button="Renew +6 months"), button="Renew +6 months")
@@ -415,17 +428,171 @@ check("renewal: active again with a future end date", "Active" in t and "Blocked
 # 17. drive status: closed drives disappear from the portal
 _, _, html = get(f"/placements?drive={drive}", ADMIN)
 submit(f"/placements?drive={drive}", ADMIN, find_form(html, button="Mark closed"), button="Mark closed")
-_, _, html = get("/portal/drives", NEW)
+_, _, html = get("/portal/drives", STU)
 check("closed drive hidden from students", "E2E Corp" not in html)
 _, _, html = get(f"/placements?drive={drive}", ADMIN)
 submit(f"/placements?drive={drive}", ADMIN, find_form(html, button="Mark open"), button="Mark open")
-_, _, html = get("/portal/drives", NEW)
+_, _, html = get("/portal/drives", STU)
 check("re-opened drive visible to students", "E2E Corp" in html)
 
 # 18. portal account page
 _, _, html = get("/portal/account", NEW)
 s, _, body = submit("/portal/account", NEW, find_form(html, must=["password", "confirm"]), {"password": "short", "confirm": "short"})
 check("password change validates length", "at least 8 characters" in body)
+
+# 19. college / corporate admissions with a brand-new college or company typed on the form
+for cat, sel, extra, label in [("college", "college_id", {"new_college_name": "E2E Engineering College", "new_college_city": "Mysuru"}, "college"),
+                               ("corporate", "client_id", {"new_client_name": "E2E Silicon Pvt Ltd", "new_client_contact": "HR Head"}, "company")]:
+    _, _, html = get("/students/new", ADMIN)
+    f = find_form(html, must=["full_name", "course_id"])
+    vals = {"full_name": f"E2E {cat.title()} Student", "category": cat, sel: "__new", "course_id": f["selects"]["course_id"]["options"][0], **extra}
+    s, loc, body = submit("/students/new", ADMIN, f, vals)
+    check(f"admission as {cat} student with a new {label}", s in (302, 303, 307) and "/students/" in loc and not loc.endswith("/new"), f"status {s} loc {loc} {text(body)[:200]}")
+_, _, html = get("/colleges", ADMIN)
+check("new college appears in College Master", "E2E Engineering College" in html)
+_, _, html = get("/students/new", ADMIN)
+check("new college offered on the next admission", "E2E Engineering College" in html)
+
+# 20. full logo everywhere
+for p, ck in [("/login", ""), ("/dashboard", ADMIN), (f"/documents/{serial}", ADMIN), ("/verify/" + serial, "")]:
+    _, _, html = get(p, ck)
+    check(f"full logo on {p.split('/')[1] or 'login'}", "logo-full.svg" in html or "logo-mark.svg" in html)
+s, h, raw = http("GET", "/logo-full.svg", "")
+check("logo file contains the complete name", s == 200 and b"MASTERVLSI" in raw and b"Industry" in raw)
+
+# 21. finance & fund flow (admin only)
+def money(txt):
+    return int(re.sub(r"[^\d-]", "", txt) or 0)
+
+for p in ["/finance", "/finance/income", "/finance/income?entity=enrich", "/finance/income?entity=property", "/finance/tenants", "/finance/tenants/tcy-3",
+          "/finance/expenses", "/finance/expenses?view=utilities", "/finance/expenses?view=property", "/finance/pay", "/finance/receivables",
+          "/finance/accounts", "/finance/budgets", "/finance/reports"] + [f"/finance/tenants/tcy-3?tab={t}" for t in ["agreement", "rent", "utilities", "maintenance", "deposit", "documents", "history"]]:
+    s, final, html = get(p, ADMIN)
+    check(f"finance page {p}", s == 200 and "Application error" not in html and "Internal Server Error" not in html, f"status {s} at {final}")
+for t in ["pnl", "income", "expenses", "receivables"]:
+    s, h, raw = http("GET", f"/api/export/finance?type={t}", ADMIN)
+    check(f"finance export {t}", s == 200 and raw.startswith(b"\xef\xbb\xbf"), f"status {s}")
+s, final, _ = get("/finance", STU)
+check("students cannot open finance", not final.startswith("/finance"), final)
+s, _, _ = http("GET", "/api/export/finance?type=pnl", STU)
+check("students cannot export finance", s == 403, f"status {s}")
+_, _, html = get("/dashboard", STU)
+check("finance menu hidden from students", "Finance Dashboard" not in html)
+_, _, html = get("/finance", ADMIN)
+t = text(html)
+check("dashboard shows multi-source example", "Payment completed" in t and "ABC Electricals" in t)
+check("dashboard shows entity P&L and cash flow", "Entity-wise P" in t and "Cash flow trend" in t)
+
+# add a tenant to the vacant Home 06 with a deposit
+_, _, html = get("/finance/tenants", ADMIN)
+f = find_form(html, must=["unit_id", "monthly_rent", "full_name"])
+s, loc, body = submit("/finance/tenants", ADMIN, f, {"full_name": "E2E Tenant", "phone": "9000011111", "start_date": TODAY.isoformat(), "monthly_rent": "14000",
+                                                     "due_day": "5", "maintenance_charge": "1000", "security_deposit": "42000", "deposit_received": "42000", "deposit_account": "account:acc-pr-sbi"})
+tid = (re.search(r"/finance/tenants/([\w-]+)", loc) or [None, None])[1]
+check("add tenant", tid, f"status {s} loc {loc} {text(body)[:200]}")
+TP = f"/finance/tenants/{tid}"
+_, _, html = get(TP, ADMIN)
+t = text(html)
+check("tenant: deposit held 42,000 and this month's due raised", "₹42,000" in t and "₹15,000" in t, t[:300])
+_, _, html = get("/finance/tenants", ADMIN)
+check("Home 06 no longer vacant", "E2E Tenant" in html and "Add tenant" in html)
+
+# utility bill paid by tenant goes onto this month's due; then pay it all
+_, _, html = get(TP + "?tab=utilities", ADMIN)
+submit(TP + "?tab=utilities", ADMIN, find_form(html, must=["utility", "bill_month", "amount"]), {"utility": "electricity", "bill_month": TODAY.strftime("%Y-%m"), "amount": "850", "prev_reading": "100", "curr_reading": "185", "payer": "tenant"})
+_, _, html = get(TP + "?tab=rent", ADMIN)
+check("tenant utility added to this month's due", "₹15,850" in text(html))
+f = find_form(html, must=["kind", "amount", "paid_on"])
+s, _, body = submit(TP + "?tab=rent", ADMIN, f, {"kind": "rent", "amount": "15850", "mode": "UPI", "reference": "E2E-RENT-1", "account": ""})
+_, _, html = get(TP, ADMIN)
+check("rent payment clears the due (outstanding ₹0)", re.search(r"Outstanding\s*₹0", text(html)) is not None, text(html)[:400])
+
+# maintenance completed at owner's cost becomes a property expense
+_, _, html = get(TP + "?tab=maintenance", ADMIN)
+submit(TP + "?tab=maintenance", ADMIN, find_form(html, must=["title", "priority"]), {"title": "E2E tap repair", "priority": "high"})
+_, _, html = get(TP + "?tab=maintenance", ADMIN)
+f = find_form(html, must=["status", "cost", "charge_to"])
+submit(TP + "?tab=maintenance", ADMIN, f, {"status": "completed", "cost": "1800", "charge_to": "owner"})
+_, _, html = get("/finance/expenses?view=property", ADMIN)
+check("maintenance cost booked as property expense", "Maintenance: E2E tap repair" in html)
+
+# expenses: small one approved straight away; seeded ₹3,20,000 bill approved by super admin
+_, _, html = get("/finance/expenses", ADMIN)
+s, _, body = submit("/finance/expenses", ADMIN, find_form(html, must=["entity", "category", "description", "amount"]),
+                    {"entity": "property", "category": "Water", "description": "E2E water tanker", "amount": "3000", "payee": "E2E Water Co"})
+check("small expense saved as approved", "Expense saved." in body, text(body)[:200])
+_, _, html = get("/finance/budgets", ADMIN)
+f = find_form(html, button="Approve")
+submit("/finance/budgets", ADMIN, f, button="Approve")
+_, _, html = get("/finance/budgets", ADMIN)
+check("super admin approves bill from queue", "Nothing waiting for approval" in html)
+
+# multi-source payment for the E2E water bill (property): part from MasterVLSI bank -> settlement
+_, _, html = get("/finance/pay", ADMIN)
+f = find_form(html, must=["expense_id", "payee", "src_0", "amt_0"])
+water = re.search(r'<option value="([\w-]+)">E2E water tanker', html)
+check("unpaid bill offered for payment", water)
+s, _, body = submit("/finance/pay", ADMIN, f, {"expense_id": water[1], "payee": "E2E Water Co", "paid_on": TODAY.isoformat(), "reference": "E2E-PAY-1",
+                                              "src_0": "account:acc-mv-icici", "amt_0": "2000", "src_1": "pool:rent", "amt_1": "1000"})
+check("multi-source payment succeeds and records a settlement", "Paid ₹3,000 to E2E Water Co" in body and "inter-entity settlement" in body, text(body)[:300])
+_, _, html = get("/finance/pay", ADMIN)
+check("new settlement property -> MasterVLSI ₹2,000 pending", re.search(r"₹2,000[\s\S]{0,400}E2E Water Co", html) is not None)
+_, _, html = get("/finance/expenses?view=property", ADMIN)
+check("paid bill marked paid", re.search(r"E2E water tanker[\s\S]{0,600}Paid", html) is not None)
+
+# overdraft protection
+_, _, html = get("/finance/pay", ADMIN)
+s, _, body = submit("/finance/pay", ADMIN, find_form(html, must=["from_ref", "to_ref", "amount"]), {"from_ref": "pool:rent", "to_ref": "account:acc-pr-sbi", "amount": "99999999", "transfer_date": TODAY.isoformat()})
+check("transfer larger than balance refused", "Not enough balance" in body, text(body)[:200])
+_, _, html = get("/finance/accounts?ref=account:acc-pr-sbi", ADMIN)
+before = re.search(r"Property — SBI savings[\s\S]{0,800}?(₹[\d,]+)", html)
+s, _, body = submit("/finance/pay", ADMIN, find_form(get("/finance/pay", ADMIN)[2], must=["from_ref", "to_ref", "amount"]), {"from_ref": "pool:rent", "to_ref": "account:acc-pr-sbi", "amount": "1000", "transfer_date": TODAY.isoformat(), "reference": "E2E-DEP"})
+check("transfer recorded", "Transfer recorded." in body, text(body)[:200])
+_, _, html = get("/finance/accounts?ref=account:acc-pr-sbi", ADMIN)
+after = re.search(r"Property — SBI savings[\s\S]{0,800}?(₹[\d,]+)", html)
+check("account balance went up by ₹1,000", before and after and money(after[1]) - money(before[1]) == 1000, f"{before and before[1]} -> {after and after[1]}")
+check("statement lists the transfer", "Transfer in from Rent collections" in html)
+
+# settle the seeded MasterVLSI -> Property ₹20,000
+_, _, html = get("/finance/pay", ADMIN)
+forms = [f for f in forms_of(html) if "from_ref" in f["names"] and "date" in f["names"]]
+pending_before = len(forms)
+s, _, body = submit("/finance/pay", ADMIN, forms[-1])
+_, _, html = get("/finance/pay", ADMIN)
+check("settlement settled", "Settled." in body and len([f for f in forms_of(html) if "from_ref" in f["names"] and "date" in f["names"]]) == pending_before - 1, text(body)[:200])
+
+# recurring: add one due today and create the bill
+_, _, html = get("/finance/expenses", ADMIN)
+f = find_form(html, must=["description", "frequency", "next_due"], must_not=["id"])
+submit("/finance/expenses", ADMIN, f, {"entity": "enrich", "category": "Internet & phone", "description": "E2E broadband", "amount": "999", "frequency": "monthly", "next_due": TODAY.isoformat()})
+_, _, html = get("/finance/expenses", ADMIN)
+submit("/finance/expenses", ADMIN, find_form(html, button="Create bills that are due now"), button="Create bills that are due now")
+_, _, html = get("/finance/expenses?view=company", ADMIN)
+check("recurring payment turned into a bill", "E2E broadband" in html and "Recurring" in html)
+
+# budget and other income
+_, _, html = get("/finance/budgets", ADMIN)
+submit("/finance/budgets", ADMIN, find_form(html, must=["entity", "category", "amount", "month"], must_not=["id"]), {"entity": "property", "category": "Water", "amount": "10000"})
+_, _, html = get("/finance/budgets", ADMIN)
+check("budget vs actual shows water budget", re.search(r"Water[\s\S]{0,200}₹10,000", html) is not None)
+_, _, html = get("/finance/income?entity=enrich", ADMIN)
+s, _, body = submit("/finance/income?entity=enrich", ADMIN, find_form(html, must=["entity", "amount", "category"]), {"amount": "55000", "category": "Consulting", "note": "E2E consulting", "account": "account:acc-es-hdfc"})
+_, _, html = get("/finance/income?entity=enrich", ADMIN)
+check("other income recorded for Enrich", "E2E consulting" in html)
+
+# exit: refund = deposit − deductions − unpaid
+_, _, html = get(TP + "?tab=deposit", ADMIN)
+s, _, body = submit(TP + "?tab=deposit", ADMIN, find_form(html, must=["exit_date", "deductions", "refund_ref"]), {"exit_date": TODAY.isoformat(), "deductions": "2000", "refund_ref": "account:acc-pr-sbi"})
+check("exit & settlement refunds ₹40,000", "Refund ₹40,000" in body, text(body)[:300])
+_, _, html = get("/finance/tenants", ADMIN)
+check("home vacant again after exit", re.search(r"Home 06[\s\S]{0,200}Vacant", html) is not None)
+
+# daily job raises dues and recurring bills
+s, _, raw = http("POST", "/api/cron/expiry", "", headers={"authorization": "Bearer e2e-secret"})
+data = json.loads(raw or b"{}")
+check("daily job includes finance", "finance" in data and "rent_dues_raised" in data["finance"], str(data.get("finance")))
+_, _, html = get("/finance/tenants/tcy-3", ADMIN)
+check("daily job doesn't backdate rent arrears before the tenancy was added", re.search(r"Outstanding\s*₹0", text(html)) is not None, re.search(r"Outstanding\s*\S+", text(html)) and re.search(r"Outstanding\s*\S+", text(html))[0])
 
 passed = sum(1 for r in results if r[1])
 print(f"\n{passed}/{len(results)} checks passed")

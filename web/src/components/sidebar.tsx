@@ -37,6 +37,14 @@ import {
   UserCog,
   Users,
   X,
+  ArrowLeftRight,
+  ClipboardCheck,
+  FileSpreadsheet,
+  Home,
+  PieChart,
+  Receipt,
+  Send,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import Image from "next/image";
@@ -45,7 +53,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 type Item = { href: string; label: string; icon: LucideIcon };
-type Section = { title: string; items: Item[] };
+type Section = { title: string; items: Item[]; adminOnly?: boolean };
 
 /** Staff navigation: one entry per core module. */
 const staffNav: Section[] = [
@@ -84,6 +92,21 @@ const staffNav: Section[] = [
       { href: "/fees", label: "Fees Management", icon: IndianRupee },
       { href: "/vendors", label: "Vendor & Subvendor Management", icon: Network },
       { href: "/accounts", label: "Accounts & Finance", icon: Landmark },
+    ],
+  },
+  {
+    title: "Finance & Fund Flow",
+    adminOnly: true,
+    items: [
+      { href: "/finance", label: "Finance Dashboard", icon: PieChart },
+      { href: "/finance/income", label: "Income Management", icon: Wallet },
+      { href: "/finance/tenants", label: "Rental Income (Tenants)", icon: Home },
+      { href: "/finance/expenses", label: "Expense Management", icon: Receipt },
+      { href: "/finance/pay", label: "Payments & Fund Transfer", icon: Send },
+      { href: "/finance/receivables", label: "Receivables & Payables", icon: ArrowLeftRight },
+      { href: "/finance/accounts", label: "Bank & Cash Accounts", icon: Landmark },
+      { href: "/finance/budgets", label: "Budgets & Approvals", icon: ClipboardCheck },
+      { href: "/finance/reports", label: "Reports & MIS", icon: FileSpreadsheet },
     ],
   },
   {
@@ -153,12 +176,12 @@ const studentNav: Section[] = [
 export function Sidebar({ role, name, demo, signOut }: { role: string; name: string; demo: boolean; signOut: () => Promise<void> }) {
   const path = usePathname();
   const [open, setOpen] = useState(false);
-  const nav = role === "student" ? studentNav : role === "college" ? collegeNav : staffNav;
+  const nav = (role === "student" ? studentNav : role === "college" ? collegeNav : staffNav).filter((sec) => !sec.adminOnly || role === "super_admin" || role === "admin");
 
   const body = (
     <div className="flex h-full flex-col">
       <div className="flex h-[60px] shrink-0 items-center gap-2 border-b border-line px-4">
-        <Image src="/logo.png" alt="" width={34} height={34} className="rounded" />
+        <Image src="/logo-mark.svg" alt="MasterVLSI" width={34} height={34} unoptimized className="rounded border border-line" />
         <div className="leading-tight">
           <div className="text-[15px] font-bold text-navy">
             Master<span className="text-brand">VLSI</span>
@@ -172,7 +195,7 @@ export function Sidebar({ role, name, demo, signOut }: { role: string; name: str
             <div className="px-2 pb-1.5 text-[11px] font-medium tracking-wide text-slate-400 uppercase">{sec.title}</div>
             <div className="space-y-0.5">
               {sec.items.map(({ href, label, icon: Icon }) => {
-                const active = path === href || (href !== "/portal" && path.startsWith(href + "/"));
+                const active = path === href || (href !== "/portal" && href !== "/finance" && path.startsWith(href + "/"));
                 return (
                   <Link
                     key={href}

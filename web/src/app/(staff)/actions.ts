@@ -45,10 +45,22 @@ export async function createStudentAction(form: FormData) {
       client_id: z.string().optional(),
     })
     .parse(Object.fromEntries(form));
+  const repo = await getRepo();
+  const field = (k: string) => String(form.get(k) ?? "").trim();
+  // "+ Add new …" in the form: create the college / company first, then link the student to it.
+  if (input.category === "college" && input.college_id === "__new") {
+    if (!field("new_college_name")) throw new Error("Enter the new college's name");
+    const c = await repo.save("colleges", { name: field("new_college_name"), city: field("new_college_city") || undefined, status: "partner" });
+    input.college_id = c?.id;
+  }
+  if (input.category === "corporate" && input.client_id === "__new") {
+    if (!field("new_client_name")) throw new Error("Enter the new company's name");
+    const c = await repo.save("clients", { name: field("new_client_name"), contact_person: field("new_client_contact") || undefined, kind: "corporate_training" });
+    input.client_id = c?.id;
+  }
   if (input.category === "college" && !input.college_id) throw new Error("Pick the college for a college student");
   if (input.category === "corporate" && !input.client_id) throw new Error("Pick the company for a corporate student");
 
-  const repo = await getRepo();
   const s = await repo.createStudent({ ...input, allocations });
   const enquiryId = String(form.get("enquiry_id") || "");
   if (enquiryId) await repo.setEnquiry(enquiryId, { status: "admitted", student_id: s.id });

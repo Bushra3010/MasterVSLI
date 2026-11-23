@@ -16,6 +16,9 @@ export function AdmissionForm({ courses, batches, vendors, defaults = {}, branch
   branches?: Branch[]; colleges?: College[]; clients?: Client[]; kacha?: boolean;
 }) {
   const [category, setCategory] = useState<"normal" | "college" | "corporate">("normal");
+  // With nothing in College Master / clients yet, start on "add new" so the form can always be completed.
+  const [collegeId, setCollegeId] = useState(colleges.length ? "" : "__new");
+  const [clientId, setClientId] = useState(clients.length ? "" : "__new");
   const [courseId, setCourseId] = useState(courses.find((c) => c.code === defaults.course_code)?.id ?? courses[0]?.id ?? "");
   const course = courses.find((c) => c.id === courseId);
   const [fee, setFee] = useState(course?.fee ?? 0);
@@ -58,13 +61,35 @@ export function AdmissionForm({ courses, batches, vendors, defaults = {}, branch
           {category === "college" && (
             <div>
               <label className="label">College *</label>
-              <select name="college_id" required className="input"><option value="">Pick college</option>{colleges.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+              <select name="college_id" required className="input" value={collegeId} onChange={(e) => setCollegeId(e.target.value)}>
+                <option value="">Pick college</option>
+                {colleges.map((c) => <option key={c.id} value={c.id}>{c.name}{c.city ? ` — ${c.city}` : ""}</option>)}
+                <option value="__new">+ Add new college…</option>
+              </select>
+              {collegeId === "__new" && (
+                <div className="mt-2 grid gap-2">
+                  <input name="new_college_name" required placeholder="College name *" aria-label="New college name" className="input" />
+                  <input name="new_college_city" placeholder="City" aria-label="College city" className="input" />
+                  <p className="text-[11px] text-muted">Saved to College Management → College Master with this admission.</p>
+                </div>
+              )}
             </div>
           )}
           {category === "corporate" && (
             <div>
               <label className="label">Company (sponsor) *</label>
-              <select name="client_id" required className="input"><option value="">Pick company</option>{clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+              <select name="client_id" required className="input" value={clientId} onChange={(e) => setClientId(e.target.value)}>
+                <option value="">Pick company</option>
+                {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                <option value="__new">+ Add new company…</option>
+              </select>
+              {clientId === "__new" && (
+                <div className="mt-2 grid gap-2">
+                  <input name="new_client_name" required placeholder="Company name *" aria-label="New company name" className="input" />
+                  <input name="new_client_contact" placeholder="Contact person" aria-label="Company contact person" className="input" />
+                  <p className="text-[11px] text-muted">Saved to the company list with this admission.</p>
+                </div>
+              )}
             </div>
           )}
         </div>
