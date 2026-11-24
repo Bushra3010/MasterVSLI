@@ -12,7 +12,10 @@ export default async function NewStudentPage({ searchParams }: PageProps<"/stude
   const [courses, batches, vendors, enquiries] = await Promise.all([repo.courses(), repo.batches(), repo.vendors(), repo.enquiries()]);
   const e = typeof sp.enquiry === "string" ? enquiries.find((x) => x.id === sp.enquiry) : undefined;
   const lead = typeof sp.lead === "string" ? await repo.one<Lead>("leads", sp.lead) : null;
-  const [branches, colleges, clients] = await Promise.all([repo.list<Branch>("branches"), repo.list<College>("colleges"), repo.list<Client>("clients")]);
+  const [branches, colleges, clients] = await Promise.all([repo.list<Branch>("branches"), repo.list<College>("colleges", { order: { column: "name" } }), repo.list<Client>("clients", { order: { column: "name" } })]);
+  const { createProfileRepo } = await import("@/lib/profile");
+  const { getStore } = await import("@/lib/session");
+  const [options, me] = await Promise.all([createProfileRepo(await getStore()).options(), getSession()]);
   const defaults: AdmissionDefaults = lead
     ? { lead_id: lead.id, full_name: lead.full_name, email: lead.email ?? undefined, phone: lead.phone ?? undefined, city: lead.city ?? undefined, course_code: lead.course_code ?? undefined, source: lead.source }
     : e
@@ -21,7 +24,7 @@ export default async function NewStudentPage({ searchParams }: PageProps<"/stude
   return (
     <>
       <PageHeader title="New admission" subtitle="Creates the student, fee split, installments and all access channels in one step." />
-      <AdmissionForm courses={courses} batches={batches} vendors={vendors} defaults={defaults} branches={branches} colleges={colleges} clients={clients} kacha={isSuperAdmin(await getSession())} />
+      <AdmissionForm courses={courses} batches={batches} vendors={vendors} defaults={defaults} branches={branches} colleges={colleges} clients={clients} kacha={isSuperAdmin(me)} designations={options.designation} canRemove={me?.role === "super_admin" || me?.role === "admin"} />
     </>
   );
 }

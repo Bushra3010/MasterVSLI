@@ -27,6 +27,10 @@ export default async function PlacementsPage({ searchParams }: PageProps<"/place
   const responded = new Set(rs.map((r) => r.student_id));
   const notResponded = eligible.filter((s) => !responded.has(s.id));
   const yes = responses.filter((r) => r.response === "yes");
+  // Everyone who can answer, plus anyone who already did — answered "yes" first.
+  const roster = [...new Map([...eligible, ...rs.map((r) => student.get(r.student_id)).filter((x): x is NonNullable<typeof x> => Boolean(x))].map((x) => [x.id, x])).values()]
+    .map((x) => ({ s: x, r: rs.find((r) => r.student_id === x.id) }))
+    .sort((a, b) => Number(b.r?.response === "yes") - Number(a.r?.response === "yes") || a.s.full_name.localeCompare(b.s.full_name));
 
   return (
     <>
@@ -58,9 +62,9 @@ export default async function PlacementsPage({ searchParams }: PageProps<"/place
                   </div>
                   <div className="mt-2 text-xs text-muted">{[d.location, d.drive_date && fmtDate(d.drive_date), d.interview_mode, d.ctc].filter(Boolean).join(" · ")}</div>
                   <div className="mt-2 flex flex-wrap gap-1.5">
-                    <Badge tone="green">Yes {r.filter((x) => x.response === "yes").length}</Badge>
-                    <Badge tone="red">No {r.filter((x) => x.response === "no").length}</Badge>
-                    <Badge>Pending {r.filter((x) => x.response === "pending").length}</Badge>
+                    <Badge tone="green">{r.filter((x) => x.response === "yes").length} interested</Badge>
+                    <Badge tone="red">{r.filter((x) => x.response === "no").length} not interested</Badge>
+                    <span className="text-[11px] text-muted">Open to record answers →</span>
                   </div>
                 </Link>
               );
@@ -85,51 +89,49 @@ export default async function PlacementsPage({ searchParams }: PageProps<"/place
                 <span className="text-sm text-muted">
                   {[selected.eligibility, `${notResponded.length} eligible students haven't responded`].filter(Boolean).join(" · ")}
                 </span>
-                <SyncButton driveId={selected.id} pending={rs.filter((r) => r.response === "yes" && !r.synced_to_sheet).length} />
+                <div className="flex flex-wrap items-center gap-2">
+                  <a href={`/api/export/drive?drive=${selected.id}`} className="btn-ghost py-1.5 text-xs">Download sheet (Excel)</a>
+                  <SyncButton driveId={selected.id} pending={rs.filter((r) => r.response === "yes" && !r.synced_to_sheet).length} />
+                </div>
               </div>
               <table className="table">
-                <thead><tr><th>Student</th><th>Response</th><th>Stage</th><th>Synced to sheet</th></tr></thead>
+                <thead><tr><th>Student</th><th>Interested?</th><th>Stage</th><th>Google Sheet</th></tr></thead>
                 <tbody>
-                  {rs
-                    .sort((a, b) => (a.response === "yes" ? -1 : 1) - (b.response === "yes" ? -1 : 1))
-                    .map((r) => (
-                      <tr key={r.student_id}>
-                        <td>
-                          <Link href={`/students/${r.student_id}`} className="font-medium hover:text-brand">{student.get(r.student_id)?.full_name}</Link>
-                          <div className="text-xs text-muted">{student.get(r.student_id)?.course_name}</div>
-                        </td>
-                        <td><StatusBadge status={r.response} /></td>
-                        <td>
-                          {r.response === "yes" ? (
-                            <form action={async (f: FormData) => { "use server"; await setStageAction(selected.id, r.student_id, String(f.get("stage"))); }} className="flex gap-1">
-                              <select name="stage" defaultValue={r.stage ?? "Applied"} className="input w-auto py-1 text-xs">
-                                {STAGES.map((s) => <option key={s}>{s}</option>)}
-                              </select>
-                              <button className="btn-ghost py-1 text-xs">Save</button>
-                            </form>
-                          ) : "—"}
-                        </td>
-                        <td>
-                          {r.response !== "yes" ? "—" : r.synced_to_sheet ? <Badge tone="green">Synced {fmtDate(r.synced_at)}</Badge> : <Badge tone="amber">Not synced</Badge>}
-                        </td>
-                      </tr>
-                    ))}
-                  {!rs.length && <tr><td colSpan={4} className="text-center text-muted">No responses yet</td></tr>}
+                  {roster.map(({ s: st, r }) => (
+                    <tr key={st.id}>
+                      <td>
+                        <Link href={`/students/${st.id}`} className="font-medium hover:text-brand">{st.full_name}</Link>
+                        <div className="text-xs text-muted">{st.enrollment_no} · {st.course_name}</div>
+                      </td>
+                      <td>
+                        {selected.status === "closed" ? (
+                          r ? <StatusBadge status={r.response} /> : <span className="text-xs text-muted">No answer</span>
+                        ) : (
+                          <form action={recordResponseAction.bind(null, selected.id)} className="flex gap-1">
+                            <input type="hidden" name="student_id" value={st.id} />
+                            <button name="response" value="yes" aria-pressed={r?.response === "yes"} className={`btn py-1 text-xs ${r?.response === "yes" ? "bg-emerald-600 text-white" : "border border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-50"}`}>Yes</button>
+                            <button name="response" value="no" aria-pressed={r?.response === "no"} className={`btn py-1 text-xs ${r?.response === "no" ? "bg-red-600 text-white" : "border border-red-200 bg-white text-red-700 hover:bg-red-50"}`}>No</button>
+                          </form>
+                        )}
+                      </td>
+                      <td>
+                        {r?.response === "yes" ? (
+                          <form action={async (f: FormData) => { "use server"; await setStageAction(selected.id, st.id, String(f.get("stage"))); }} className="flex gap-1">
+                            <select name="stage" defaultValue={r.stage ?? "Applied"} aria-label="Stage" className="input w-auto py-1 text-xs">
+                              {STAGES.map((x) => <option key={x}>{x}</option>)}
+                            </select>
+                            <button className="btn-ghost py-1 text-xs">Save</button>
+                          </form>
+                        ) : "—"}
+                      </td>
+                      <td>
+                        {r?.response !== "yes" ? "—" : r.synced_to_sheet ? <Badge tone="green">Synced {fmtDate(r.synced_at)}</Badge> : <Badge tone="amber">Not synced</Badge>}
+                      </td>
+                    </tr>
+                  ))}
+                  {!roster.length && <tr><td colSpan={4} className="text-center text-muted">No active students with placement consent yet</td></tr>}
                 </tbody>
               </table>
-              <form action={recordResponseAction.bind(null, selected.id)} className="flex flex-wrap items-center gap-2 border-t border-line bg-slate-50 p-3">
-                <span className="text-xs font-medium text-muted">Record a response on a student&apos;s behalf:</span>
-                <select name="student_id" required aria-label="Student" className="input w-auto py-1.5" defaultValue="">
-                  <option value="" disabled>Select student…</option>
-                  {eligible.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.full_name} ({s.enrollment_no}){responded.has(s.id) ? " — already answered" : ""}
-                    </option>
-                  ))}
-                </select>
-                <button name="response" value="yes" className="btn py-1.5 text-xs border border-emerald-300 bg-emerald-50 text-emerald-800">Yes, interested</button>
-                <button name="response" value="no" className="btn py-1.5 text-xs border border-red-200 bg-red-50 text-brand">No</button>
-              </form>
             </Card>
           )}
         </div>

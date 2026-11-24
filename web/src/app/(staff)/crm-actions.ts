@@ -124,10 +124,13 @@ export async function decideAmbassadorAction(id: string, status: AmbassadorActiv
 export async function addAmbassadorAction(form: FormData) {
   await requireStaff();
   const a = z
-    .object({ student_id: z.string().min(1), kind: z.enum(["referral", "review", "social", "mentor"]), details: z.string().trim().min(3), reward_amount: z.coerce.number().min(0).optional() })
+    .object({ student_id: z.string().min(1), kind: z.enum(["referral", "review", "social", "mentor"]), details: z.string().trim().min(3) })
     .parse(Object.fromEntries(form));
+  // An empty reward box means "use the standard reward for this activity" (₹2,000 referral, ₹100 social, ₹1,000 mentor; reviews earn gifts).
+  const typed = String(form.get("reward_amount") ?? "").trim();
+  const reward_amount = typed === "" ? REWARD[a.kind].amount : Math.max(0, Number(typed) || 0);
   const { getStore } = await import("@/lib/session");
-  await (await getStore()).insert("ambassador_activities", [{ ...a, reward_amount: a.reward_amount ?? REWARD[a.kind].amount, status: "approved", created_at: new Date().toISOString() }]);
+  await (await getStore()).insert("ambassador_activities", [{ ...a, reward_amount, gift: REWARD[a.kind].gift ?? null, status: "approved", created_at: new Date().toISOString() }]);
   refresh();
 }
 

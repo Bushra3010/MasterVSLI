@@ -47,21 +47,37 @@ export async function createStudentAction(form: FormData) {
     .parse(Object.fromEntries(form));
   const repo = await getRepo();
   const field = (k: string) => String(form.get(k) ?? "").trim();
-  // "+ Add new …" in the form: create the college / company first, then link the student to it.
-  if (input.category === "college" && input.college_id === "__new") {
-    if (!field("new_college_name")) throw new Error("Enter the new college's name");
-    const c = await repo.save("colleges", { name: field("new_college_name"), city: field("new_college_city") || undefined, status: "partner" });
-    input.college_id = c?.id;
-  }
-  if (input.category === "corporate" && input.client_id === "__new") {
-    if (!field("new_client_name")) throw new Error("Enter the new company's name");
-    const c = await repo.save("clients", { name: field("new_client_name"), contact_person: field("new_client_contact") || undefined, kind: "corporate_training" });
-    input.client_id = c?.id;
+  // College / company details: pick an existing entry (optionally edit its city/state) or add a new one to the master.
+  const upsertOrg = async (table: "colleges" | "clients", prefix: "college" | "company", extra: Record<string, unknown>) => {
+    const name = field(`${prefix}_name`);
+    if (!name) throw new Error(`Enter the ${prefix === "college" ? "college" : "company"} name`);
+    if (!field(`${prefix}_city`) || !field(`${prefix}_state`)) throw new Error(`Enter the ${prefix === "college" ? "college" : "company"} city and state`);
+    const existing = field(`${prefix}_id`) || (await repo.list<{ id: string; name: string }>(table)).find((o) => o.name.trim().toLowerCase() === name.toLowerCase())?.id;
+    if (existing) {
+      if (field(`${prefix}_edit`)) await repo.save(table, { id: existing, name, city: field(`${prefix}_city`), state: field(`${prefix}_state`) });
+      return existing;
+    }
+    return (await repo.save(table, { name, city: field(`${prefix}_city`), state: field(`${prefix}_state`), ...extra }))?.id;
+  };
+  if (input.category === "college") input.college_id = await upsertOrg("colleges", "college", { status: "partner" });
+  if (input.category === "corporate") {
+    if (!field("company_designation")) throw new Error("Enter the employee designation");
+    const rows = field("hr_rows").split(",").filter(Boolean);
+    const hr = rows.map((k) => ({ name: field(`hr.${k}.name`), designation: field(`hr.${k}.designation`), email: field(`hr.${k}.email`), phone: field(`hr.${k}.phone`) })).filter((h) => h.name);
+    if (!hr.length) throw new Error("Add at least one HR / company contact");
+    input.client_id = await upsertOrg("clients", "company", { kind: "corporate_training", contact_person: hr[0].name, email: hr[0].email || undefined, phone: hr[0].phone || undefined });
+    const company = field("company_name");
+    const known = await repo.list<{ email?: string | null; phone?: string | null; current_company?: string | null }>("hr_contacts");
+    for (const h of hr) {
+      const dup = known.some((k) => (k.current_company ?? "").toLowerCase() === company.toLowerCase() && ((h.email && k.email === h.email) || (h.phone && k.phone === h.phone)));
+      if (!dup) await repo.save("hr_contacts", { full_name: h.name, designation: h.designation, email: h.email, phone: h.phone, current_company: company, company_type: "Corporate training client", city: field("company_city") });
+    }
   }
   if (input.category === "college" && !input.college_id) throw new Error("Pick the college for a college student");
   if (input.category === "corporate" && !input.client_id) throw new Error("Pick the company for a corporate student");
 
   const s = await repo.createStudent({ ...input, allocations });
+  if (input.category === "corporate" && field("company_designation")) await repo.updateStudent(s.id, { extra: { company_designation: field("company_designation") } });
   const enquiryId = String(form.get("enquiry_id") || "");
   if (enquiryId) await repo.setEnquiry(enquiryId, { status: "admitted", student_id: s.id });
   const leadId = String(form.get("lead_id") || "");
@@ -159,86 +175,6 @@ export async function runExpiryAction() {
   const delivery = await deliverPendingNotifications(repo).catch(() => null);
   revalidatePath("/", "layout");
   return { processed: out, delivery };
-}
-
-// ---- profile editing --------------------------------------------------------
-const EDU_LEVELS = ["10th", "12th / Diploma", "B.Tech / B.E", "M.Tech / PG"];
-
-export async function updateProfileAction(id: string, form: FormData) {
-  await requireStaff();
-  const g = (k: string) => {
-    const v = form.get(k);
-    return v === null ? undefined : String(v).trim();
-  };
-  const opt = (k: string) => g(k) || null;
-  const group = (prefix: string, keys: string[]) =>
-    Object.fromEntries(keys.map((k) => [k, g(`${prefix}.${k}`) || undefined]).filter(([, v]) => v !== undefined));
-
-  const full_name = g("full_name");
-  if (!full_name || full_name.length < 2) throw new Error("Full name is required");
-
-  const repo = await getRepo();
-  await repo.updateStudent(id, {
-    full_name,
-    dob: opt("dob"),
-    gender: opt("gender"),
-    marital_status: opt("marital_status"),
-    blood_group: opt("blood_group"),
-    nationality: opt("nationality"),
-    languages: (g("languages") ?? "").split(",").map((s) => s.trim()).filter(Boolean),
-    native_place: opt("native_place"),
-    phone: opt("phone"),
-    alt_phone: opt("alt_phone"),
-    email: opt("email"),
-    alt_email: opt("alt_email"),
-    linkedin: opt("linkedin"),
-    resume_url: opt("resume_url"),
-    address: group("address", ["line", "city", "district", "state", "pincode"]),
-    family: group("family", ["father_name", "father_occupation", "father_phone", "mother_name", "mother_occupation", "mother_phone"]),
-    emergency: group("emergency", ["name", "relation", "phone"]),
-    spouse: group("spouse", ["name", "occupation", "phone"]),
-    professional: {
-      ...group("pro", ["working_status", "company", "total_exp", "relevant_exp", "current_ctc", "expected_ctc", "notice_period", "preferred_location", "interview_mode"]),
-      relocate: form.get("pro.relocate") === "on",
-    },
-    ...(g("category") ? { category: (["normal", "college", "corporate"].includes(g("category")!) ? g("category") : "normal") as "normal" | "college" | "corporate" } : {}),
-    ...(form.has("branch_id") ? { branch_id: opt("branch_id") } : {}),
-    // converting e.g. a college student to a normal student clears the college / company link
-    ...(form.has("college_id") ? { college_id: g("category") === "college" ? opt("college_id") : null } : {}),
-    ...(form.has("client_id") ? { client_id: g("category") === "corporate" ? opt("client_id") : null } : {}),
-    course_id: opt("course_id"),
-    batch_id: opt("batch_id"),
-    training_mode: (g("training_mode") as "online" | "offline" | "hybrid") || "hybrid",
-    admission_date: g("admission_date") || undefined,
-    validity_end: opt("validity_end"),
-    payment_plan: opt("payment_plan"),
-    referred_by: opt("referred_by"),
-    lead_source: opt("lead_source"),
-    placement_consent: form.get("placement_consent") === "on",
-    placement_eligible: form.get("placement_eligible") === "on",
-  });
-
-  await repo.replaceEducation(
-    id,
-    EDU_LEVELS.map((level, i) => ({
-      level,
-      institution: opt(`edu.${i}.institution`),
-      board: opt(`edu.${i}.board`),
-      stream: opt(`edu.${i}.stream`),
-      year_of_passing: g(`edu.${i}.year`) ? Number(g(`edu.${i}.year`)) : null,
-      score: opt(`edu.${i}.score`),
-      location: opt(`edu.${i}.location`),
-    })),
-  );
-
-  await repo.setExternalRefs(id, {
-    zoom: g("ref.zoom")?.toLowerCase() || null,
-    teamviewer: opt("ref.teamviewer"),
-    biometric: opt("ref.biometric"),
-  });
-
-  revalidatePath("/", "layout");
-  redirect(`/students/${id}`);
 }
 
 // ---- settings: master data ----------------------------------------------------

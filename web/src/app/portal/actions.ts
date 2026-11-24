@@ -1,29 +1,31 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import QRCode from "qrcode";
 import { syncDriveToSheet } from "@/lib/integrations/google-sheets";
-import { getRepo, getServiceRepo } from "@/lib/server";
+import { getServiceRepo, getStudentReadRepo } from "@/lib/server";
 import { requireStudent } from "@/lib/session";
 import type { DriveResponseValue } from "@/lib/types";
 
 export async function respondAction(driveId: string, response: DriveResponseValue) {
   const s = await requireStudent();
-  const repo = await getRepo();
-  const profile = await repo.profile(s.studentId);
+  // Reads and the write use the server's access, always scoped to the signed-in student's own id,
+  // after every rule below has been checked (students' row-level permissions made this fragile).
+  const svc = await getStudentReadRepo();
+  const profile = await svc.profile(s.studentId);
   const placement = profile?.access.find((a) => a.channel === "placement");
-  if (!profile || profile.student.status !== "active" || !placement?.enabled) {
-    throw new Error("Placement access is blocked for your account. Please contact the admin.");
-  }
+  if (!profile || profile.student.status !== "active" || !placement?.enabled) redirect("/portal/drives?error=blocked");
   // Placement profile is active only after the student accepts the placement terms.
   const { required } = await getServiceRepo().consentFor(s.studentId, "placement");
-  if (required) throw new Error("Accept the Placement Terms & Conditions to activate your placement profile.");
-  const drive = (await repo.drives()).find((d) => d.id === driveId);
-  if (!drive || drive.status !== "open") throw new Error("This drive is not accepting responses.");
-  await repo.respond(driveId, s.studentId, response);
+  if (required) redirect("/portal/drives?error=terms");
+  const drive = (await svc.drives()).find((d) => d.id === driveId);
+  if (!drive || drive.status !== "open") redirect("/portal/drives?error=closed");
+  await svc.respond(driveId, s.studentId, response);
   // "Yes" → auto-export to the drive's Google Sheet (best effort; admins can re-sync from the dashboard).
   if (response === "yes") await syncDriveToSheet(getServiceRepo(), driveId).catch(() => null);
   revalidatePath("/portal", "layout");
+  redirect(`/portal/drives?saved=${response}`);
 }
 
 export async function changePasswordAction(_: unknown, form: FormData): Promise<{ ok: boolean; message: string }> {
@@ -152,4 +154,23 @@ export async function submitAssignmentAction(assignmentId: string, form: FormDat
   const { getServiceStore } = await import("@/lib/session");
   await getServiceStore().upsert("assignment_submissions", [{ assignment_id: assignmentId, student_id: s.studentId, link: link.slice(0, 500), note: note.slice(0, 500) || null, submitted_at: new Date().toISOString(), status: "submitted" }], "assignment_id,student_id");
   revalidatePath("/portal/learning");
+}
+
+/** Students fill / correct their own profile (personal, contact, address, family, education, pre-joining work). */
+export async function saveOwnProfileAction(_: { ok: boolean; message: string } | null, form: FormData): Promise<{ ok: boolean; message: string }> {
+  const s = await requireStudent();
+  const { parseProfileForm } = await import("@/lib/profile");
+  const repo = await getStudentReadRepo();
+  const p = await repo.profile(s.studentId);
+  if (!p) return { ok: false, message: "Profile not found" };
+  try {
+    const { patch, education } = parseProfileForm(form, "student", p.student);
+    // A student's own edit needs the office to verify the profile again.
+    await repo.updateStudent(s.studentId, { ...patch, profile_verified_by: null, profile_verified_at: null });
+    await repo.replaceEducation(s.studentId, education);
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Could not save" };
+  }
+  revalidatePath("/portal", "layout");
+  return { ok: true, message: "Saved. The office will review and verify your profile." };
 }

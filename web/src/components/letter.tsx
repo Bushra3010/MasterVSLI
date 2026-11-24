@@ -99,6 +99,11 @@ function LetterBody({ letter: l, student: s, course: c, staff: st, qr, verifyUrl
         <div className="mt-2 text-3xl font-semibold text-brand">{name}</div>
         <div className="mt-4 text-sm">has successfully completed the training programme</div>
         <div className="mt-1 text-xl font-semibold text-navy">{c?.name}</div>
+        {(l.data.start || l.data.end) && (
+          <div className="mt-1 text-sm">
+            {l.data.start && l.data.end ? <>from <b>{fmtDate(l.data.start)}</b> to <b>{fmtDate(l.data.end)}</b></> : l.data.start ? <>from <b>{fmtDate(l.data.start)}</b></> : <>completed on <b>{fmtDate(l.data.end)}</b></>}
+          </div>
+        )}
         <div className="mt-2 text-sm text-muted">Enrollment {s?.enrollment_no}{l.data.grade ? ` · Grade ${l.data.grade}` : ""} · Issued {fmtDate(l.issued_at)}</div>
         <div className="mx-auto mt-6 max-w-2xl text-left">{Footer}</div>
         <div className="mt-2 text-[10px] text-muted">Verify at {verifyUrl}</div>

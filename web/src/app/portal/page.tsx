@@ -1,4 +1,4 @@
-import { AlertTriangle, Bell } from "lucide-react";
+import { AlertTriangle, Bell, Briefcase } from "lucide-react";
 import { noticeText } from "@/lib/notify";
 import { StudentProfileView } from "@/components/student-profile";
 import { PayNow } from "./pay-now";
@@ -15,7 +15,9 @@ export default async function PortalHome({ searchParams }: PageProps<"/portal">)
   const s = await requireStudent();
   const repo = await getStudentReadRepo();
   const svc = getServiceRepo();
-  const [p, notices, general, placement] = await Promise.all([repo.profile(s.studentId), repo.studentNotifications(s.studentId), svc.consentFor(s.studentId, "general"), svc.consentFor(s.studentId, "placement")]);
+  const [p, notices, general, placement, allDrives] = await Promise.all([repo.profile(s.studentId), repo.studentNotifications(s.studentId), svc.consentFor(s.studentId, "general"), svc.consentFor(s.studentId, "placement"), svc.drives()]);
+  // Open and upcoming drives, soonest first (drives without a date last)
+  const drives = allDrives.filter((d) => d.status !== "closed" && (!d.drive_date || d.drive_date >= todayISO())).sort((a, b) => (a.drive_date ?? "9999").localeCompare(b.drive_date ?? "9999")).slice(0, 6);
   if (!p) return <p>Profile not found.</p>;
   const st = p.student;
   const left = st.validity_end ? daysBetween(todayISO(), st.validity_end) : null;
@@ -68,6 +70,28 @@ export default async function PortalHome({ searchParams }: PageProps<"/portal">)
         <div className="mb-5 rounded-[5px] border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-800">
           Thank you! Your payment is being confirmed. The receipt appears under Fee &amp; payment summary within a minute.
         </div>
+      )}
+      {drives.length > 0 && (
+        <Card title="Upcoming company drives" icon={<Briefcase size={15} />} className="mb-5" bodyClass="p-0 overflow-x-auto" actions={<Link href="/portal/drives" className="text-xs underline">Respond to drives →</Link>}>
+          <table className="table">
+            <thead><tr><th>Date</th><th>Company</th><th>Role</th><th>Location · mode</th><th>Status</th><th>My answer</th></tr></thead>
+            <tbody>
+              {drives.map((d) => {
+                const mine = p.responses.find((r) => r.drive_id === d.id);
+                return (
+                  <tr key={d.id}>
+                    <td className="whitespace-nowrap">{d.drive_date ? fmtDate(d.drive_date) : "Date TBA"}{d.drive_date && <div className="text-[11px] text-muted">in {daysBetween(todayISO(), d.drive_date)} days</div>}</td>
+                    <td className="font-medium">{d.company}</td>
+                    <td>{d.job_role}{d.ctc && <div className="text-[11px] text-muted">CTC {d.ctc}</div>}</td>
+                    <td className="text-xs">{[d.location, d.interview_mode].filter(Boolean).join(" · ") || "—"}</td>
+                    <td><StatusBadge status={d.status} /></td>
+                    <td>{mine ? <StatusBadge status={mine.response} /> : d.status === "open" ? <Link href="/portal/drives" className="text-xs font-medium text-navy underline">Answer now</Link> : <span className="text-xs text-muted">Opens soon</span>}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </Card>
       )}
       <StudentProfileView p={p} receiptBase="/portal/receipt/" paymentControl={(id) => <PayNow installmentId={id} />} />
     </>

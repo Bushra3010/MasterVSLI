@@ -88,6 +88,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/student
                 <th>Fees</th>
                 <th>Validity</th>
                 <th>Status</th>
+                <th>Report</th>
               </tr>
             </thead>
             <tbody>
@@ -122,6 +123,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/student
                     )}
                   </td>
                   <td><StatusBadge status={s.status} /></td>
+                  <td><Link href={`/students/${s.id}/report`} className="text-xs font-medium text-navy underline hover:text-brand" title={`Download ${s.full_name}'s report`}>Download</Link></td>
                 </tr>
               ))}
             </tbody>

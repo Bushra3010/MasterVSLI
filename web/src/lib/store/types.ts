@@ -79,7 +79,11 @@ export type TableName =
   | "payment_sources"
   | "inter_entity_settlements"
   | "fund_transfers"
-  | "budgets";
+  | "budgets"
+  // enhanced profile
+  | "master_options"
+  | "student_applications"
+  | "student_notes";
 
 export interface Query {
   eq?: Record<string, string | number | boolean | null>;

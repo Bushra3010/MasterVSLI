@@ -203,7 +203,7 @@ s, loc, body = submit(SP + "/edit", ADMIN, f, {
     "pro.working_status": "Fresher", "pro.expected_ctc": "6 LPA", "pro.relocate": "on",
     "placement_eligible": "on", "placement_consent": "on", "validity_end": v30, "ref.biometric": "E2E-BIO-1",
 })
-check("edit profile saves", s in (303, 302, 307) and loc.endswith(new_id), f"status {s} loc {loc} {text(body)[:300]}")
+check("edit profile saves", s in (303, 302, 307) and f"/students/{new_id}" in loc, f"status {s} loc {loc} {text(body)[:300]}")
 _, _, prof = get(SP, ADMIN)
 t = text(prof)
 for needle in ["JNTU Hyderabad", "8.1 CGPA", "E2E Father", "Hyderabad", "English, Hindi, Telugu", "Eligible"]:
@@ -309,8 +309,14 @@ s, loc, _ = submit("/placements", ADMIN, f, {"company": "E2E Corp", "job_role": 
 drive = (re.search(r"drive=([\w-]+)", loc) or [None, None])[1]
 check("placements: drive created", drive, f"loc {loc}")
 _, _, html = get(f"/placements?drive={drive}", ADMIN)
-f = find_form(html, must=["student_id"], button="Yes, interested")
-s, _, _ = submit(f"/placements?drive={drive}", ADMIN, f, {"student_id": new_id}, button="Yes, interested")
+def row_form(html, sid):
+    for f in forms_of(html):
+        if any(n == "student_id" and v == sid for n, v, _ in f["fields"]) and any(b["value"] == "yes" for b in f["buttons"]):
+            return f
+    raise AssertionError(f"no Yes/No row for {sid}")
+check("placements: every eligible student has Yes/No buttons", sum(1 for f in forms_of(html) if any(b["value"] == "yes" for b in f["buttons"])) >= 5)
+f = row_form(html, new_id)
+s, _, _ = submit(f"/placements?drive={drive}", ADMIN, f, button="Yes")
 _, _, html = get(f"/placements?drive={drive}", ADMIN)
 check("placements: staff-recorded yes appears", "E2E Student" in html and "Synced" in html, "expected demo sheet sync")
 f = find_form(html, must=["stage"])
@@ -440,14 +446,29 @@ _, _, html = get("/portal/account", NEW)
 s, _, body = submit("/portal/account", NEW, find_form(html, must=["password", "confirm"]), {"password": "short", "confirm": "short"})
 check("password change validates length", "at least 8 characters" in body)
 
-# 19. college / corporate admissions with a brand-new college or company typed on the form
-for cat, sel, extra, label in [("college", "college_id", {"new_college_name": "E2E Engineering College", "new_college_city": "Mysuru"}, "college"),
-                               ("corporate", "client_id", {"new_client_name": "E2E Silicon Pvt Ltd", "new_client_contact": "HR Head"}, "company")]:
+# 19. college / corporate admissions with full college / company details (new entries go to the masters)
+ORG = {
+    "college": {"college_name": "E2E Engineering College", "college_city": "Mysuru", "college_state": "Karnataka"},
+    "corporate": {"company_name": "E2E Silicon Pvt Ltd", "company_city": "Bengaluru", "company_state": "Karnataka", "company_designation": "DV Engineer",
+                  "hr_rows": "0,1", "hr.0.name": "E2E HR One", "hr.0.designation": "HR Manager", "hr.0.email": "hr1@e2e-silicon.example", "hr.0.phone": "+919000000001",
+                  "hr.1.name": "E2E HR Two", "hr.1.email": "hr2@e2e-silicon.example"},
+}
+org_ids = {}
+for cat in ["college", "corporate"]:
     _, _, html = get("/students/new", ADMIN)
     f = find_form(html, must=["full_name", "course_id"])
-    vals = {"full_name": f"E2E {cat.title()} Student", "category": cat, sel: "__new", "course_id": f["selects"]["course_id"]["options"][0], **extra}
+    vals = {"full_name": f"E2E {cat.title()} Student", "category": cat, "course_id": f["selects"]["course_id"]["options"][0], **ORG[cat]}
     s, loc, body = submit("/students/new", ADMIN, f, vals)
-    check(f"admission as {cat} student with a new {label}", s in (302, 303, 307) and "/students/" in loc and not loc.endswith("/new"), f"status {s} loc {loc} {text(body)[:200]}")
+    org_ids[cat] = (re.search(r"/students/([\w-]+)", loc) or [None, None])[1]
+    check(f"admission as {cat} student with new {cat} details", s in (302, 303, 307) and org_ids[cat] and org_ids[cat] != "new", f"status {s} loc {loc} {text(body)[:200]}")
+_, _, html = get("/students/new", ADMIN)
+f = find_form(html, must=["full_name", "course_id"])
+s, loc, body = submit("/students/new", ADMIN, f, {"full_name": "E2E No City", "category": "college", "course_id": f["selects"]["course_id"]["options"][0], "college_name": "E2E Engineering College"})
+check("college admission requires city and state", s == 500 or "city and state" in body.lower(), f"status {s}")
+_, _, html = get("/hr-contacts", ADMIN)
+check("company HR contacts saved to HR master", "E2E HR One" in html and "E2E HR Two" in html)
+_, _, html = get(f"/students/{org_ids['corporate']}", ADMIN)
+check("corporate student keeps designation", "DV Engineer" in text(html) or "DV Engineer" in html)
 _, _, html = get("/colleges", ADMIN)
 check("new college appears in College Master", "E2E Engineering College" in html)
 _, _, html = get("/students/new", ADMIN)
@@ -593,6 +614,101 @@ data = json.loads(raw or b"{}")
 check("daily job includes finance", "finance" in data and "rent_dues_raised" in data["finance"], str(data.get("finance")))
 _, _, html = get("/finance/tenants/tcy-3", ADMIN)
 check("daily job doesn't backdate rent arrears before the tenancy was added", re.search(r"Outstanding\s*₹0", text(html)) is not None, re.search(r"Outstanding\s*\S+", text(html)) and re.search(r"Outstanding\s*\S+", text(html))[0])
+
+# 22. training certificate carries the training start and end dates
+_, _, html = get(f"/documents?template=training_certificate&subject=student:{new_id}", ADMIN)
+f = find_form(html, must=["template", "subject", "d_start", "d_end"])
+s, loc, _ = submit("/documents", ADMIN, f, {"d_start": "2026-06-01", "d_end": "2026-11-30", "d_grade": "A"})
+_, _, html = get(loc, ADMIN)
+check("training certificate shows from/to dates", "/documents/MV-CRT-" in loc and re.search(r"from\s*01 Jun 2026\s*to\s*30 Nov 2026", text(html)) is not None, text(html)[:300])
+
+# 23. drive sheet download, "No" answer, ambassador rewards, per-student report
+s, h, raw = http("GET", f"/api/export/drive?drive={drive}", ADMIN)
+check("drive sheet downloads as Excel with the student", s == 200 and b"E2E Student" in raw and b"Enrollment No" in raw, f"status {s}")
+_, _, html = get(f"/placements?drive={drive}", ADMIN)
+other = next(f for f in forms_of(html) if any(b["value"] == "no" for b in f["buttons"]) and not any(v == new_id for _, v, _ in f["fields"]))
+submit(f"/placements?drive={drive}", ADMIN, other, button="No")
+_, _, html = get(f"/placements?drive={drive}", ADMIN)
+check("staff can record a No answer", re.search(r'aria-pressed="true"[^>]*value="no"|value="no"[^>]*aria-pressed="true"', html) is not None)
+for kind, expect in [("referral", "₹2,000"), ("mentor", "₹1,000"), ("social", "₹100")]:
+    _, _, html = get("/ambassadors?show=all", ADMIN)
+    f = find_form(html, must=["student_id", "kind", "details"])
+    submit("/ambassadors?show=all", ADMIN, f, {"kind": kind, "details": f"E2E amb {kind}", "reward_amount": ""})
+    _, _, html = get("/ambassadors?show=all", ADMIN)
+    row = re.search(r"E2E amb " + kind + r"[\s\S]{0,300}?(₹[\d,]+)", html)
+    check(f"ambassador {kind}: blank reward uses standard {expect}", row and row[1] == expect, row and row[1])
+check("ambassador counters include all activity types", re.search(r"referrals · \d+ reviews · \d+ likes/shares · \d+ mentees", text(get("/ambassadors", ADMIN)[2])) is not None)
+s, final, html = get(f"/students/{new_id}/report", ADMIN)
+t = text(html)
+check("per-student report renders", s == 200 and "Student Report" in t and "E2E Student" in t and "Attendance (last 90 days)" in t and "Fees" in t, f"status {s}")
+_, _, html = get("/students", ADMIN)
+check("students list links each report", f"/students/{new_id}/report" in html)
+_, _, html = get(f"/students/{new_id}", ADMIN)
+check("profile has Download report", "Download report" in html)
+
+# 24. students see upcoming drives on their dashboard, and saving an answer confirms it
+_, _, html = get("/portal", STU)
+check("student dashboard lists upcoming drives", "Upcoming company drives" in html and "Wipro" in html)
+_, _, html = get("/portal/drives", STU)
+f = find_form(html, button="No")
+s, loc, body = submit("/portal/drives", STU, f, button="No")
+_, final, html = get(loc or "/portal/drives", STU)
+check("student answer confirmed on screen", "Saved" in text(html), f"{s} {loc}")
+
+# 25. enhanced profile: vertical education with dropdowns, address, WhatsApp, access IDs, before/after, college contacts
+CS = f"/students/{org_ids['college']}"
+_, _, html = get(CS + "/edit", ADMIN)
+check("edit page offers board / university / stream lists", "State Board (Karnataka)" in html and "VTU" in html and "Science (PCM)" in html)
+check("edit page has all states and union territories", "Ladakh" in html and "Puducherry" in html and "Telangana" in html)
+f = find_form(html, must=["full_name", "edu.0.board"])
+s, loc, body = submit(CS + "/edit", ADMIN, f, {
+    "edu.0.board": "State Board (Karnataka)", "edu.0.institution": "E2E High School", "edu.0.start": "2015", "edu.0.end": "2016", "edu.0.year": "2016", "edu.0.score": "92%", "edu.0.state": "Karnataka",
+    "edu.2.board": "VTU", "edu.2.stream": "ECE", "edu.2.institution": "E2E Engineering College", "edu.2.start": "2018", "edu.2.end": "2022", "edu.2.year": "2022", "edu.2.score": "8.4", "edu.2.state": "Karnataka",
+    "phone": "9000099999", "extra.phone_whatsapp": "on", "address.line": "1 Lake Road", "address.city": "Mysuru", "address.state": "Karnataka",
+    "extra.current_same": None, "current.line": "22 PG Hostel", "current.city": "Bengaluru", "current.state": "Karnataka",
+    "ref.zoom": "e2e.zoom@example.com", "ref.biometric": "E2E-BIO-77", "ref.teamviewer": "TV-E2E-1",
+    "pro.working_status": "Working", "pro.company": "ABC Technologies", "before.designation": "Graduate Engineer", "before.from": "2024-07", "before.to": "2026-01", "before.location": "Bengaluru",
+    "after.status": "Placed", "after.company": "Meta", "after.designation": "Design Engineer", "after.package": "50 LPA", "after.doj": "2026-12-07", "after.hr_name": "John Mathew", "after.hr_email": "john@example.com", "after.location": "Bengaluru",
+    "contact.0.position": "TPO", "contact.0.name": "Mr Suresh", "contact.0.phone": "9988776655", "contact.0.email": "tpo@college.example",
+    "contact.1.position": "HOD", "contact.1.name": "Dr Anil Kumar", "contact.1.phone": "9876543210",
+})
+check("enhanced profile saves", s in (302, 303, 307) and "saved=1" in loc, f"status {s} loc {loc} {text(body)[:300]}")
+_, _, html = get(loc or CS, ADMIN)
+t = text(html)
+for needle in ["State Board (Karnataka)", "2015 – 2016", "VTU", "8.4", "22 PG Hostel", "WhatsApp", "e2e.zoom@example.com", "E2E-BIO-77", "TV-E2E-1",
+               "Graduate Engineer", "2024-07 – 2026-01", "Meta", "50 LPA", "John Mathew", "Mr Suresh", "Dr Anil Kumar", "Profile saved"]:
+    check(f"profile shows {needle!r}", needle in t)
+_, _, html = get(CS + "/edit", ADMIN)
+check("college contacts reload into the form", 'value="Mr Suresh"' in html and 'value="Dr Anil Kumar"' in html)
+
+# applications & interview tracking, notes, verification
+_, _, html = get(CS, ADMIN)
+f = find_form(html, must=["company", "rounds", "hr_email"], must_not=["id"])
+submit(CS, ADMIN, f, {"company": "E2E Intel", "role": "DV Engineer", "rounds": "3", "status": "shortlisted", "package": "18 LPA", "hr_name": "E2E HR", "job_location": "Bengaluru"})
+_, _, html = get(CS, ADMIN)
+check("application added", "E2E Intel" in html and "Shortlisted" in text(html) and "18 LPA" in html)
+f = next(ff for ff in forms_of(html) if "id" in ff["names"] and "rounds" in ff["names"])
+submit(CS, ADMIN, f, {"status": "placed", "rounds": "4"})
+_, _, html = get(CS, ADMIN)
+check("application status updated", re.search(r"E2E Intel[\s\S]{0,800}Placed", text(html)) is not None)
+submit(CS, ADMIN, find_form(html, must=["note"]), {"note": "E2E note: strong in UVM"})
+_, _, html = get(CS, ADMIN)
+check("note added", "E2E note: strong in UVM" in html)
+check("profile starts unverified", "Profile not verified" in text(html))
+submit(CS, ADMIN, find_form(html, button="Mark profile verified"), button="Mark profile verified")
+_, _, html = get(CS, ADMIN)
+check("profile verified by staff", "Profile verified by" in text(html))
+check("documents limited to photo, resume, ID proof", 'value="photo"' in html and 'value="certificate"' not in html.split("Documents")[-1][:3000])
+
+# student edits own profile from the portal; office re-verifies
+s, final, html = get("/portal/profile", STU)
+check("student can open My Profile", s == 200 and final == "/portal/profile" and "Save profile" in html)
+check("student form hides office-only fields", 'name="ref.zoom"' not in html and 'name="validity_end"' not in html and 'name="after.company"' not in html)
+f = find_form(html, must=["full_name", "family.father_name"])
+s, _, body = submit("/portal/profile", STU, f, {"family.father_name": "E2E Father Self", "edu.2.institution": "E2E Self College"})
+check("student saves own profile", "The office will review" in body, text(body)[:200])
+_, _, html = get("/students/s-002", ADMIN)
+check("office sees the student's update and it needs verification", "E2E Father Self" in html and "Profile not verified" in text(html))
 
 passed = sum(1 for r in results if r[1])
 print(f"\n{passed}/{len(results)} checks passed")

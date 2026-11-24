@@ -24,7 +24,7 @@ export interface CampusDrive {
   status: "upcoming" | "ongoing" | "completed" | "cancelled";
 }
 
-export interface Client { id: string; name: string; contact_person?: string | null; email?: string | null; phone?: string | null; gstin?: string | null; kind: "services" | "corporate_training" }
+export interface Client { id: string; name: string; contact_person?: string | null; email?: string | null; phone?: string | null; gstin?: string | null; kind: "services" | "corporate_training"; city?: string | null; state?: string | null }
 export interface Project { id: string; client_id?: string | null; name: string; status: "active" | "on_hold" | "completed"; start_date?: string | null; end_date?: string | null; hourly_rate?: number | null }
 export interface Timesheet { id: string; project_id: string; staff_id: string; work_date: string; hours: number; note?: string | null }
 export interface Invoice {

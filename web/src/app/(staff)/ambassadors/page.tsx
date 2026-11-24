@@ -9,6 +9,9 @@ import { addAmbassadorAction, decideAmbassadorAction } from "../crm-actions";
 
 export const metadata = { title: "Brand ambassadors" };
 
+const KIND_LABEL: Record<string, string> = { referral: "Referral", review: "Google review", social: "Like / subscribe / share", mentor: "Mentor" };
+const DEFAULT_REWARD: Record<string, number> = { referral: 2000, review: 0, social: 100, mentor: 1000 };
+
 export default async function AmbassadorsPage({ searchParams }: PageProps<"/ambassadors">) {
   const sp = await searchParams;
   const show = typeof sp.show === "string" ? sp.show : "pending";
@@ -29,7 +32,7 @@ export default async function AmbassadorsPage({ searchParams }: PageProps<"/amba
         <Stat label="Ambassadors" value={board.length} icon={<Crown size={18} />} />
         <Stat label="Rewards credited" value={inr(total.earned)} tone="green" icon={<Wallet size={18} />} />
         <Stat label="Gifts delivered" value={total.gifts} tone="amber" icon={<Gift size={18} />} />
-        <Stat label="Referrals" value={total.referrals} tone="blue" />
+        <Stat label="Activities" value={total.referrals + total.reviews + total.social + total.mentees} tone="blue" hint={`${total.referrals} referrals · ${total.reviews} reviews · ${total.social} likes/shares · ${total.mentees} mentees`} />
         <Stat label="Awaiting action" value={rows.filter((r) => r.status === "pending" || r.status === "approved").length} tone="red" />
       </div>
 
@@ -46,7 +49,7 @@ export default async function AmbassadorsPage({ searchParams }: PageProps<"/amba
                 <tr key={r.id}>
                   <td className="whitespace-nowrap">{fmtDate(r.created_at)}</td>
                   <td><Link href={`/students/${r.student_id}`} className="font-medium text-navy hover:text-brand">{name.get(r.student_id)?.full_name}</Link></td>
-                  <td className="capitalize">{r.kind}</td>
+                  <td>{KIND_LABEL[r.kind] ?? r.kind}</td>
                   <td className="max-w-64 text-xs">{r.details}{r.proof_url && <> · <a href={r.proof_url} target="_blank" rel="noreferrer" className="text-brand">proof</a></>}</td>
                   <td className="whitespace-nowrap">{Number(r.reward_amount) ? inr(r.reward_amount) : r.gift ?? "—"}</td>
                   <td><Badge tone={ambTone(r.status)}>{r.status}</Badge></td>
@@ -57,9 +60,14 @@ export default async function AmbassadorsPage({ searchParams }: PageProps<"/amba
                         <button className="text-emerald-700 hover:underline">Approve</button>
                       </form>
                     )}
-                    {r.status === "approved" && (Number(r.reward_amount) > 0
-                      ? <form action={decideAmbassadorAction.bind(null, r.id, "credited")} className="inline"><button className="text-emerald-700 hover:underline">Mark credited</button></form>
-                      : <form action={decideAmbassadorAction.bind(null, r.id, "delivered")} className="inline"><button className="text-blue-700 hover:underline">Gift delivered</button></form>)}
+                    {r.status === "approved" && (r.kind === "review" && !Number(r.reward_amount)
+                      ? <form action={decideAmbassadorAction.bind(null, r.id, "delivered")} className="inline"><button className="text-blue-700 hover:underline">Gift delivered</button></form>
+                      : (
+                        <form action={decideAmbassadorAction.bind(null, r.id, "credited")} className="inline-flex items-center gap-1">
+                          <input name="reward_amount" type="number" min={0} defaultValue={Number(r.reward_amount) || DEFAULT_REWARD[r.kind] || ""} aria-label="Reward amount" className="input w-20 py-1" />
+                          <button className="text-emerald-700 hover:underline">Mark credited</button>
+                        </form>
+                      ))}
                     {(r.status === "pending" || r.status === "approved") && <> · <form action={decideAmbassadorAction.bind(null, r.id, "rejected")} className="inline"><button className="text-muted hover:text-brand">Reject</button></form></>}
                   </td>
                 </tr>
@@ -71,7 +79,7 @@ export default async function AmbassadorsPage({ searchParams }: PageProps<"/amba
             <select name="student_id" required aria-label="Student" className="input w-auto py-1.5">{students.map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}</select>
             <select name="kind" aria-label="Activity" className="input w-auto py-1.5"><option value="referral">Referral</option><option value="review">Google review</option><option value="social">Like / subscribe / share</option><option value="mentor">Mentor</option></select>
             <input name="details" required placeholder="Details" aria-label="Details" className="input min-w-48 flex-1 py-1.5" />
-            <input name="reward_amount" type="number" min={0} placeholder="₹ reward" aria-label="Reward" className="input w-28 py-1.5" />
+            <input name="reward_amount" type="number" min={0} placeholder="₹ reward (blank = standard)" aria-label="Reward" className="input w-52 py-1.5" />
             <button className="btn-primary py-1.5 text-xs">+ Record activity</button>
           </form>
         </Card>

@@ -32,7 +32,16 @@ export const TEMPLATES: TemplateMeta[] = [
       { key: "end", label: "End date", type: "date" },
     ],
   },
-  { id: "training_certificate", title: "Training Completion Certificate", audience: "student", fields: [{ key: "grade", label: "Grade", placeholder: "A" }] },
+  {
+    id: "training_certificate",
+    title: "Training Completion Certificate",
+    audience: "student",
+    fields: [
+      { key: "start", label: "Start date", type: "date" },
+      { key: "end", label: "End date", type: "date" },
+      { key: "grade", label: "Grade", placeholder: "A" },
+    ],
+  },
   {
     id: "placement_confirmation",
     title: "Placement Confirmation Letter",

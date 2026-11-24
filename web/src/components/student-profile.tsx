@@ -18,7 +18,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { Badge, Card, Field, Progress, StatusBadge } from "@/components/ui";
 import { fmtDate, inr, titleCase } from "@/lib/format";
-import { DOC_KINDS, docFileName, type Channel, type StudentDocument, type StudentProfile } from "@/lib/types";
+import { APPLICATION_STATUSES, DOC_KINDS, docFileName, EDU_ALIASES, EDU_ROWS, type Channel, type StudentApplication, type StudentDocument, type StudentProfile, type TpoContact } from "@/lib/types";
 
 const channelMeta: Record<Channel, { label: string; icon: ReactNode }> = {
   zoom: { label: "Zoom (live class)", icon: <Video size={15} /> },
@@ -39,8 +39,18 @@ export function StudentProfileView({
   documentControl,
   uploadSlot,
   receiptBase = "/fees/receipt/",
+  applications = [],
+  applicationSlot,
+  applicationControl,
+  collegeContacts,
+  attendanceHref,
 }: {
   receiptBase?: string;
+  applications?: StudentApplication[];
+  applicationSlot?: ReactNode;
+  applicationControl?: (a: StudentApplication) => ReactNode;
+  collegeContacts?: TpoContact[];
+  attendanceHref?: string;
   p: StudentProfile;
   channelControl?: (channel: Channel, enabled: boolean) => ReactNode;
   paymentControl?: (installmentId: string, balance: number) => ReactNode;
@@ -51,6 +61,14 @@ export function StudentProfileView({
   const s = p.student;
   const pr = s.professional ?? {};
   const yesNo = (v?: boolean) => (v ? "Yes" : "No");
+  const x = s.extra ?? {};
+  const ref = (c: Channel) => p.access.find((a) => a.channel === c)?.external_ref;
+  const wa = (on?: boolean) => (on ? <span className="ml-1 rounded bg-emerald-50 px-1 text-[10px] font-medium text-emerald-700">WhatsApp</span> : null);
+  const fmtAddr = (a?: { line?: string; city?: string; district?: string; state?: string; pincode?: string }) => [a?.line, a?.city, a?.district, a?.state, a?.pincode].filter(Boolean).join(", ");
+  const months = Number(p.course?.validity_months ?? 0);
+  const comp = Number(x.complementary_months ?? 0);
+  const eduLabel = (level: string) => EDU_ROWS.find((r) => r.key === level || r.key === EDU_ALIASES[level])?.label ?? level;
+  const statusLabel = (st: string) => APPLICATION_STATUSES.find(([k]) => k === st)?.[1] ?? st;
 
   return (
     <div className="grid gap-5 xl:grid-cols-3">
@@ -67,24 +85,26 @@ export function StudentProfileView({
         </dl>
       </Card>
 
-      <Card title="Contact information" icon={<Phone size={15} />}>
+      <Card title="Contact & access information" icon={<Phone size={15} />}>
         <dl>
-          <Field label="Primary mobile" value={s.phone} />
-          <Field label="Alternate mobile" value={s.alt_phone} />
+          <Field label="Primary mobile" value={s.phone ? <>{s.phone}{wa(x.phone_whatsapp ?? true)}</> : null} />
+          <Field label="Alternate mobile" value={s.alt_phone ? <>{s.alt_phone}{wa(x.alt_whatsapp)}</> : null} />
           <Field label="Email" value={s.email} />
           <Field label="Alternate email" value={s.alt_email} />
           <Field label="LinkedIn" value={s.linkedin} />
+          <Field label="Zoom email ID" value={ref("zoom")} />
+          <Field label="Biometric ID no." value={ref("biometric")} />
+          <Field label="TeamViewer ID" value={ref("teamviewer")} />
+          <Field label="Attendance" value={attendanceHref ? <a href={attendanceHref} className="text-navy underline">{p.attendance.pct}% · View</a> : `${p.attendance.pct}% (30 days)`} />
+          {x.admin_contact && <Field label="Admin contact no." value={x.admin_contact} />}
           <Field label="Resume" value={resume ? <a href={`/api/documents/${resume.id}`} target="_blank" className="text-navy underline">View resume</a> : s.resume_url ? <a href={s.resume_url} target="_blank" className="text-navy underline">View resume</a> : null} />
         </dl>
       </Card>
 
-      <Card title="Address" icon={<Home size={15} />}>
+      <Card title="Address information" icon={<Home size={15} />}>
         <dl>
-          <Field label="Address" value={s.address?.line} />
-          <Field label="City" value={s.address?.city} />
-          <Field label="District" value={s.address?.district} />
-          <Field label="State" value={s.address?.state} />
-          <Field label="PIN code" value={s.address?.pincode} />
+          <Field label="Permanent address" value={fmtAddr(s.address) || null} />
+          <Field label="Current address" value={x.current_same !== false ? <span className="text-emerald-700">✓ Same as permanent</span> : fmtAddr(x.current_address) || null} />
         </dl>
       </Card>
 
@@ -119,7 +139,9 @@ export function StudentProfileView({
           <Field label="Batch" value={p.batch?.name} />
           <Field label="Training mode" value={titleCase(s.training_mode)} />
           <Field label="Admission date" value={fmtDate(s.admission_date)} />
-          <Field label="Duration" value={p.course ? `${p.course.duration_months} months` : null} />
+          <Field label="Course duration" value={p.course ? `${p.course.duration_months} months` : null} />
+          <Field label="Complementary duration" value={comp ? `${comp} months` : "—"} />
+          <Field label="Total validity" value={months ? `${months + comp} months (${x.validity_type === "extendable" ? "extendable" : "fixed"})` : null} />
           <Field label="Course fee" value={inr(s.total_fee)} />
           <Field label="Payment plan" value={s.payment_plan} />
           <Field label="Valid until" value={fmtDate(s.validity_end)} />
@@ -131,26 +153,31 @@ export function StudentProfileView({
       <Card title="Educational details" icon={<GraduationCap size={15} />} className="xl:col-span-3" bodyClass="p-0 overflow-x-auto">
         <table className="table">
           <thead>
-            <tr><th>Qualification</th><th>Institution / college</th><th>Board / university</th><th>Stream</th><th>Year</th><th>Score</th><th>Location</th></tr>
+            <tr><th>Level</th><th>Board / university</th><th>Stream / course</th><th>College / school</th><th>Duration</th><th>Year of passing</th><th>% / CGPA</th><th>State</th></tr>
           </thead>
           <tbody>
-            {p.education.map((e) => (
+            {[...p.education].sort((a, b) => EDU_ROWS.findIndex((r) => r.key === (EDU_ALIASES[a.level] ?? a.level)) - EDU_ROWS.findIndex((r) => r.key === (EDU_ALIASES[b.level] ?? b.level))).map((e) => (
               <tr key={e.id}>
-                <td className="font-medium">{e.level}</td><td>{e.institution}</td><td>{e.board}</td><td>{e.stream}</td>
-                <td>{e.year_of_passing}</td><td>{e.score}</td><td>{e.location}</td>
+                <td className="font-medium">{eduLabel(e.level)}</td><td>{e.board}</td><td>{e.stream}</td><td>{e.institution}</td>
+                <td className="whitespace-nowrap">{e.start_year || e.end_year ? `${e.start_year ?? "?"} – ${e.end_year ?? "?"}` : "—"}</td>
+                <td>{e.year_of_passing}</td><td>{e.score}</td><td>{e.state ?? e.location}</td>
               </tr>
             ))}
-            {!p.education.length && <tr><td colSpan={7} className="text-center text-muted">No records</td></tr>}
+            {!p.education.length && <tr><td colSpan={8} className="text-center text-muted">No records</td></tr>}
           </tbody>
         </table>
       </Card>
 
-      <Card title="Professional & placement" icon={<Briefcase size={15} />}>
+      <Card title="Professional information" icon={<Briefcase size={15} />}>
+        <div className="mb-1 text-[11px] font-semibold text-muted uppercase">(A) Before joining MasterVLSI</div>
         <dl>
           <Field label="Working status" value={pr.working_status} />
-          <Field label="Current company" value={pr.company} />
-          <Field label="Total experience" value={pr.total_exp} />
-          <Field label="Relevant experience" value={pr.relevant_exp} />
+          <Field label="Company" value={pr.company} />
+          <Field label="Designation" value={x.before?.designation} />
+          <Field label="Designation (sponsoring company)" value={x.company_designation} />
+          <Field label="Experience" value={[pr.total_exp, pr.relevant_exp && `${pr.relevant_exp} relevant`].filter(Boolean).join(" · ") || null} />
+          <Field label="From – to" value={x.before?.from || x.before?.to ? `${x.before?.from ?? "?"} – ${x.before?.to ?? "?"}` : null} />
+          <Field label="Job location" value={x.before?.location} />
           <Field label="Current CTC" value={pr.current_ctc} />
           <Field label="Expected CTC" value={pr.expected_ctc} />
           <Field label="Notice period" value={pr.notice_period} />
@@ -160,7 +187,29 @@ export function StudentProfileView({
           <Field label="Placement consent" value={yesNo(s.placement_consent)} />
           <Field label="Placement eligible" value={s.placement_eligible ? <Badge tone="green">Eligible</Badge> : <Badge>Not yet</Badge>} />
         </dl>
+        <div className="mt-3 mb-1 border-t border-line pt-2 text-[11px] font-semibold text-muted uppercase">(B) After joining MasterVLSI — placement</div>
+        <dl>
+          <Field label="Status" value={x.placement?.status} />
+          <Field label="Company" value={x.placement?.company} />
+          <Field label="Designation" value={x.placement?.designation} />
+          <Field label="Package (CTC)" value={x.placement?.package} />
+          <Field label="Date of joining" value={x.placement?.doj ? fmtDate(x.placement.doj) : null} />
+          <Field label="HR POC" value={x.placement?.hr_name ? `${x.placement.hr_name}${x.placement.hr_email ? ` · ${x.placement.hr_email}` : ""}` : null} />
+          <Field label="Job location" value={x.placement?.location} />
+        </dl>
       </Card>
+
+      {collegeContacts && (
+        <Card title="College details — key contacts" icon={<Users size={15} />}>
+          <table className="table text-[13px]">
+            <thead><tr><th>Position</th><th>Name</th><th>Mobile</th><th>Email</th></tr></thead>
+            <tbody>
+              {collegeContacts.map((c) => <tr key={c.id}><td className="font-medium">{c.designation ?? "—"}</td><td>{c.name}</td><td>{c.phone ?? "—"}</td><td className="text-xs">{c.email ?? "—"}</td></tr>)}
+              {!collegeContacts.length && <tr><td colSpan={4} className="text-center text-muted">No contacts yet — add TPO / HOD / Principal in Edit profile</td></tr>}
+            </tbody>
+          </table>
+        </Card>
+      )}
 
       <Card title="Training access & attendance" icon={<ShieldCheck size={15} />}>
         <ul className="space-y-2">
@@ -241,21 +290,38 @@ export function StudentProfileView({
         )}
       </Card>
 
-      <Card title="Company applications" icon={<Briefcase size={15} />} bodyClass="p-0">
+      <Card title="Company applications & interview tracking" icon={<Briefcase size={15} />} className="xl:col-span-3" bodyClass="p-0 overflow-x-auto">
         <table className="table">
-          <thead><tr><th>Company</th><th>Role</th><th>Response</th><th>Stage</th></tr></thead>
+          <thead><tr><th>#</th><th>Company</th><th>Applied on</th><th>Rounds</th><th>Status</th><th>Package</th><th>DOJ</th><th>HR POC</th><th>Job location</th>{applicationControl && <th />}</tr></thead>
           <tbody>
-            {p.responses.map((r) => (
-              <tr key={r.drive_id}>
-                <td className="font-medium">{r.drive.company}</td>
-                <td className="text-xs">{r.drive.job_role}</td>
-                <td><StatusBadge status={r.response} /></td>
-                <td className="text-xs">{r.stage ?? "—"}</td>
+            {applications.map((a, i) => (
+              <tr key={a.id}>
+                <td>{i + 1}</td>
+                <td className="font-medium">{a.company}{a.role && <div className="text-[11px] font-normal text-muted">{a.role}</div>}</td>
+                <td className="whitespace-nowrap">{fmtDate(a.applied_on)}</td>
+                <td>{a.rounds}</td>
+                <td><Badge tone={a.status === "rejected" ? "red" : a.status === "placed" || a.status === "selected" ? "green" : a.status === "shortlisted" ? "blue" : "amber"}>{statusLabel(a.status)}</Badge></td>
+                <td>{a.package ?? "—"}</td>
+                <td className="whitespace-nowrap">{a.doj ? fmtDate(a.doj) : "—"}</td>
+                <td className="text-xs">{a.hr_name ? <>{a.hr_name}{a.hr_email && <div className="text-muted">{a.hr_email}</div>}</> : "—"}</td>
+                <td>{a.job_location ?? "—"}</td>
+                {applicationControl && <td>{applicationControl(a)}</td>}
               </tr>
             ))}
-            {!p.responses.length && <tr><td colSpan={4} className="text-center text-muted">No applications</td></tr>}
+            {p.responses.map((r) => (
+              <tr key={`drive-${r.drive_id}`} className="text-muted">
+                <td>·</td>
+                <td className="font-medium text-ink">{r.drive.company}<div className="text-[11px] font-normal">{r.drive.job_role} · placement drive</div></td>
+                <td className="whitespace-nowrap">{r.updated_at ? fmtDate(r.updated_at) : "—"}</td>
+                <td>—</td>
+                <td><StatusBadge status={r.response} /> {r.stage && <span className="text-xs">{r.stage}</span>}</td>
+                <td colSpan={applicationControl ? 5 : 4}>{r.drive.ctc ?? ""}</td>
+              </tr>
+            ))}
+            {!applications.length && !p.responses.length && <tr><td colSpan={10} className="text-center text-muted">No applications yet</td></tr>}
           </tbody>
         </table>
+        {applicationSlot}
       </Card>
 
       <Card title="Letters & certificates" icon={<FileText size={15} />}>

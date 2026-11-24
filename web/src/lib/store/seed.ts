@@ -30,6 +30,7 @@ import type {
 import { CHANNELS } from "../types";
 import { buildCrmSeed, type CrmTables } from "./seed-crm";
 import { buildFinanceSeed, type FinanceTables } from "./seed-finance";
+import { buildProfileSeed, type ProfileTables } from "./seed-profile";
 
 /** Deterministic PRNG so demo data is stable across reloads. */
 function rng(seed: number) {
@@ -42,7 +43,7 @@ function rng(seed: number) {
   };
 }
 
-export interface DemoTables extends CrmTables, FinanceTables {
+export interface DemoTables extends CrmTables, FinanceTables, ProfileTables {
   courses: Course[];
   batches: Batch[];
   vendors: Vendor[];
@@ -370,6 +371,7 @@ export function buildSeed(): DemoTables {
   return {
     ...crm,
     ...buildFinanceSeed(today, vendors),
+    ...buildProfileSeed(today, students),
     courses,
     batches,
     vendors,

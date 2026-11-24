@@ -1,4 +1,5 @@
 export * from "./types-crm";
+export * from "./types-profile";
 import type { Company, FeeAccount, StudentCategory } from "./types-crm";
 export type Role = "super_admin" | "admin" | "staff" | "student" | "college";
 export type StudentStatus = "active" | "on_hold" | "expired" | "completed" | "dropped";
@@ -97,6 +98,10 @@ export interface Student {
   college_id?: string | null;
   client_id?: string | null;
   placement_group?: "none" | "requested" | "added";
+  extra?: import("./types-profile").StudentExtra;
+  profile_verified_by?: string | null;
+  profile_verified_at?: string | null;
+  updated_at?: string;
   created_at?: string;
 }
 
@@ -134,6 +139,9 @@ export interface Education {
   year_of_passing?: number | null;
   score?: string | null;
   location?: string | null;
+  start_year?: number | null;
+  end_year?: number | null;
+  state?: string | null;
 }
 export interface AccessRow {
   student_id: string;

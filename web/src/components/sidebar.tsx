@@ -152,6 +152,7 @@ const studentNav: Section[] = [
     title: "My Training",
     items: [
       { href: "/portal", label: "My Dashboard", icon: GraduationCap },
+      { href: "/portal/profile", label: "My Profile", icon: UserCog },
       { href: "/portal/learning", label: "Learning & Assessments", icon: BookOpen },
       { href: "/portal/documents", label: "My Documents", icon: BadgeCheck },
     ],

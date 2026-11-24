@@ -29,7 +29,7 @@ export const EDITABLE: Partial<Record<TableName, string[]>> = {
   tpo_contacts: ["college_id", "name", "designation", "phone", "alt_phone", "email", "is_primary", "active", "remarks", "next_follow_up", "last_interaction"],
   mous: ["college_id", "mou_no", "agreement_type", "start_date", "end_date", "scope", "status", "document_url"],
   campus_drives: ["college_id", "company", "job_role", "drive_date", "mode", "eligibility", "package", "registered", "attended", "shortlisted", "selected", "status"],
-  clients: ["name", "contact_person", "email", "phone", "gstin", "kind"],
+  clients: ["name", "contact_person", "email", "phone", "gstin", "kind", "city", "state"],
   projects: ["client_id", "name", "status", "start_date", "end_date", "hourly_rate"],
   timesheets: ["project_id", "staff_id", "work_date", "hours", "note"],
   hr_contacts: ["full_name", "designation", "department", "phone", "email", "linkedin", "city", "current_company", "company_type", "joined_on", "reference_note"],

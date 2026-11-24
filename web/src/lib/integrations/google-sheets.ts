@@ -60,14 +60,10 @@ async function sheetsFetch(token: string, path: string, init: RequestInit = {}) 
 
 export type SyncResult = { ok: boolean; synced: number; mode: "google" | "simulated"; message: string };
 
-export async function syncDriveToSheet(repo: Repo, driveId: string): Promise<SyncResult> {
-  const drive = (await repo.drives()).find((d) => d.id === driveId);
-  if (!drive) return { ok: false, synced: 0, mode: "simulated", message: "Drive not found" };
-  const pending = (await repo.responses(driveId)).filter((r) => r.response === "yes" && !r.synced_to_sheet);
-  if (!pending.length) return { ok: true, synced: 0, mode: "simulated", message: "Nothing new to sync" };
-
+/** One sheet row per "yes" response, with the student's full placement profile. */
+export async function driveSheetRows(repo: Repo, responses: { student_id: string; updated_at?: string | null }[]) {
   const rows: string[][] = [];
-  for (const r of pending) {
+  for (const r of responses) {
     const p = await repo.profile(r.student_id);
     if (!p) continue;
     const s = p.student;
@@ -81,6 +77,15 @@ export async function syncDriveToSheet(repo: Repo, driveId: string): Promise<Syn
       p.course?.name ?? "", p.batch?.name ?? "", String(p.attendance.pct), r.updated_at ?? "",
     ]);
   }
+  return rows;
+}
+
+export async function syncDriveToSheet(repo: Repo, driveId: string): Promise<SyncResult> {
+  const drive = (await repo.drives()).find((d) => d.id === driveId);
+  if (!drive) return { ok: false, synced: 0, mode: "simulated", message: "Drive not found" };
+  const pending = (await repo.responses(driveId)).filter((r) => r.response === "yes" && !r.synced_to_sheet);
+  if (!pending.length) return { ok: true, synced: 0, mode: "simulated", message: "Nothing new to sync — mark students as Yes first" };
+  const rows = await driveSheetRows(repo, pending);
 
   const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
   const sheetId = drive.sheet_id || process.env.GOOGLE_SHEET_ID;
@@ -89,7 +94,7 @@ export async function syncDriveToSheet(repo: Repo, driveId: string): Promise<Syn
       await repo.markSynced(driveId, pending.map((r) => r.student_id));
       return { ok: true, synced: rows.length, mode: "simulated", message: `Demo: ${rows.length} rows marked as synced (Google Sheets not configured)` };
     }
-    return { ok: false, synced: 0, mode: "google", message: "Set GOOGLE_SERVICE_ACCOUNT_JSON and GOOGLE_SHEET_ID to enable Sheets sync" };
+    return { ok: false, synced: 0, mode: "google", message: "Google Sheets isn't connected yet — use “Download sheet (Excel)” for now" };
   }
 
   const token = await accessToken(JSON.parse(raw) as ServiceAccount);
