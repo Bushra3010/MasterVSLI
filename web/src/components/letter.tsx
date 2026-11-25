@@ -113,10 +113,9 @@ function LetterBody({ letter: l, student: s, course: c, staff: st, qr, verifyUrl
   if (l.template === "student_id_card" || l.template === "visiting_card")
     return (
       <div className="mx-auto w-[340px] overflow-hidden rounded-2xl border border-line bg-white shadow-lg">
-        <div className="flex items-center gap-2 bg-navy p-3 text-white">
-          <Image src="/logo-mark.png" alt="MasterVLSI" width={36} height={36} unoptimized className="rounded" />
-          <div className="font-semibold">Master<span className="text-red-300">VLSI</span></div>
-          <div className="ml-auto text-[10px] uppercase opacity-80">{l.template === "student_id_card" ? "Student ID" : "Visiting card"}</div>
+        <div className="flex items-center gap-2 border-b-4 border-navy bg-white p-3">
+          <Image src="/logo-official.png" alt="MasterVLSI — Leader In Semiconductor Industry" width={170} height={40} unoptimized className="h-9 w-auto" />
+          <div className="ml-auto rounded bg-navy px-2 py-0.5 text-[10px] text-white uppercase">{l.template === "student_id_card" ? "Student ID" : "Visiting card"}</div>
         </div>
         <div className="flex gap-3 p-4">
           <div className="grid size-20 shrink-0 place-items-center rounded-lg bg-navy-soft text-2xl font-semibold text-navy">

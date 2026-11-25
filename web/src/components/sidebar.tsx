@@ -235,9 +235,7 @@ export function Sidebar({ role, name, demo, signOut }: { role: string; name: str
   return (
     <>
       <div className="no-print sticky top-0 z-30 flex items-center justify-between border-b border-line bg-white px-4 py-2 lg:hidden">
-        <span className="font-bold text-navy">
-          Master<span className="text-brand">VLSI</span> ERP
-        </span>
+        <Image src="/logo-official.png" alt="MasterVLSI — Leader In Semiconductor Industry" width={150} height={36} unoptimized priority className="h-8 w-auto" />
         <button onClick={() => setOpen(true)} className="p-2" aria-label="Open menu">
           <Menu size={20} />
         </button>
