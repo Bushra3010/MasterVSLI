@@ -85,7 +85,11 @@ export type TableName =
   | "student_applications"
   | "student_notes"
   // staff calendar
-  | "calendar_events";
+  | "calendar_events"
+  // HR incentives
+  | "hr_commission_rules"
+  | "hr_commissions"
+  | "hr_targets";
 
 export interface Query {
   eq?: Record<string, string | number | boolean | null>;

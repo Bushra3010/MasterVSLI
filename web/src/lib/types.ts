@@ -1,6 +1,7 @@
 export * from "./types-crm";
 export * from "./types-profile";
 export * from "./types-calendar";
+export * from "./types-incentives";
 import type { Company, FeeAccount, StudentCategory } from "./types-crm";
 export type Role = "super_admin" | "admin" | "staff" | "student" | "college";
 export type StudentStatus = "active" | "on_hold" | "expired" | "completed" | "dropped";
@@ -60,6 +61,7 @@ export interface Professional {
 }
 
 export interface Student {
+  counsellor_id?: string | null;
   id: string;
   user_id?: string | null;
   enrollment_no: string;

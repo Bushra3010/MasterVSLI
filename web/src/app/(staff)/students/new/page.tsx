@@ -15,7 +15,8 @@ export default async function NewStudentPage({ searchParams }: PageProps<"/stude
   const [branches, colleges, clients] = await Promise.all([repo.list<Branch>("branches"), repo.list<College>("colleges", { order: { column: "name" } }), repo.list<Client>("clients", { order: { column: "name" } })]);
   const { createProfileRepo } = await import("@/lib/profile");
   const { getStore } = await import("@/lib/session");
-  const [options, me] = await Promise.all([createProfileRepo(await getStore()).options(), getSession()]);
+  const [options, me, staff] = await Promise.all([createProfileRepo(await getStore()).options(), getSession(), repo.staff()]);
+  const meStaff = await repo.staffForUser(me?.userId, me?.email);
   const defaults: AdmissionDefaults = lead
     ? { lead_id: lead.id, full_name: lead.full_name, email: lead.email ?? undefined, phone: lead.phone ?? undefined, city: lead.city ?? undefined, course_code: lead.course_code ?? undefined, source: lead.source }
     : e
@@ -24,7 +25,7 @@ export default async function NewStudentPage({ searchParams }: PageProps<"/stude
   return (
     <>
       <PageHeader title="New admission" subtitle="Creates the student, fee split, installments and all access channels in one step." />
-      <AdmissionForm courses={courses} batches={batches} vendors={vendors} defaults={defaults} branches={branches} colleges={colleges} clients={clients} kacha={isSuperAdmin(me)} designations={options.designation} canRemove={me?.role === "super_admin" || me?.role === "admin"} />
+      <AdmissionForm courses={courses} batches={batches} vendors={vendors} defaults={defaults} branches={branches} colleges={colleges} clients={clients} kacha={isSuperAdmin(me)} designations={options.designation} canRemove={me?.role === "super_admin" || me?.role === "admin"} hrStaff={staff} meStaffId={meStaff?.id} />
     </>
   );
 }

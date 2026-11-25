@@ -59,7 +59,7 @@ class Forms(HTMLParser):
     def handle_starttag(self, tag, a):
         a = dict(a)
         if tag == "form":
-            self.cur = {"fields": [], "buttons": [], "selects": {}, "enctype": a.get("enctype", "")}
+            self.cur = {"fields": [], "buttons": [], "selects": {}, "enctype": a.get("enctype", ""), "pos": self.getpos()}
             self.forms.append(self.cur)
         if self.cur is None:
             return
@@ -105,8 +105,12 @@ class Forms(HTMLParser):
 def forms_of(html):
     p = Forms()
     p.feed(html)
+    starts = [0]
+    for line in html.split("\n"):
+        starts.append(starts[-1] + len(line) + 1)
     for f in p.forms:
         f["names"] = {x[0] for x in f["fields"]} | set(f["selects"])
+        f["start"] = starts[f["pos"][0] - 1] + f["pos"][1]  # character offset of <form> in the page
     return p.forms
 
 
@@ -754,6 +758,91 @@ _, _, html = get(f"/calendar?event={ev}&date={TODAY}", ADMIN)
 submit("/calendar", ADMIN, find_form(html, button="Delete"), button="Delete")
 _, _, html = get(f"/calendar?view=day&date={TODAY}", ADMIN)
 check("event deleted", "E2E calendar meeting (moved)" not in html)
+
+# 27. HR incentives: auto commission from leads & admissions, activity approval, milestones, rules, targets, payouts
+s, final, html = get("/incentives?staff=st-1", ADMIN)
+check("HR dashboard opens", s == 200 and all(k in text(html) for k in ["This month earned", "Lead conversion", "Monthly targets", "HR commission rules", "Top HR performers", "Monthly achievement summary"]))
+for p in ["/incentives/earnings", "/incentives/admin"]:
+    s, final, _ = get(p, ADMIN)
+    check(f"page {p}", s == 200 and final == p)
+s, final, _ = get("/incentives", STU)
+check("students can't open the HR dashboard", final != "/incentives")
+_, _, html = get("/leads", ADMIN)
+f = find_form(html, must=["full_name", "source"])
+s, loc, _ = submit("/leads", ADMIN, f, {"full_name": "E2E Funnel Lead", "phone": "9333333333", "source": "Website", "assigned_to": "Sowmya Rao"})
+lead_id = (re.search(r"id=([\w-]+)", loc or "") or [None, None])[1]
+check("lead created for Sowmya", bool(lead_id), f"loc {loc}")
+for stage in ["interested", "visited"]:
+    _, _, html = get(f"/leads?id={lead_id}", ADMIN)
+    submit(f"/leads?id={lead_id}", ADMIN, find_form(html, button=f"Mark {stage}"), button=f"Mark {stage}")
+_, _, html = get("/incentives/earnings?staff=st-2", ADMIN)
+t = text(html)
+check("lead → interested → visited credited ₹300 + ₹300", "E2E Funnel Lead" in t and "Lead → Interested" in t and "Interested → Visited" in t)
+_, _, html = get(f"/students/new?lead={lead_id}", ADMIN)
+f = find_form(html, must=["full_name", "course_id"])
+s, loc, body = submit("/students/new", ADMIN, f, {"full_name": "E2E Funnel Lead", "category": "college", "course_id": f["selects"]["course_id"]["options"][0], "college_name": "E2E Engineering College", "college_city": "Bengaluru", "college_state": "Karnataka"})
+check("lead converted to admission", s in (302, 303, 307) and "/students/" in (loc or ""), f"status {s} {text(body)[:200]}")
+_, _, html = get("/incentives/earnings?staff=st-2", ADMIN)
+rows = [r for r in re.findall(r"<tr[\s\S]*?</tr>", html) if "E2E Funnel Lead" in r]
+check("admission credited ₹400 (total ₹1,000 for the lead, as a college admission)", len(rows) == 3 and any("Visited → Admission" in r and "college" in r for r in rows), f"{len(rows)} rows")
+_, _, html = get(f"/leads?id={lead_id}", ADMIN)
+_, _, html = get("/students/new", ADMIN)
+f = find_form(html, must=["full_name", "course_id"])
+check("admission form asks who admitted and the commission type", "counsellor_id" in f["names"] and "commission_type" in f["names"])
+s, loc, _ = submit("/students/new", ADMIN, f, {"full_name": "E2E Bulk Student", "category": "normal", "course_id": f["selects"]["course_id"]["options"][0], "counsellor_id": "st-3", "commission_type": "admission_bulk"})
+_, _, html = get("/incentives/earnings?staff=st-3", ADMIN)
+check("direct admission credits the chosen HR", re.search(r"Bulk admission[\s\S]{0,400}E2E Bulk Student[\s\S]{0,600}500", html) is not None)
+
+# HR logs activities; admin approves / rejects; milestone kicks in
+_, _, html = get("/incentives/earnings", ADMIN)
+f = find_form(html, must=["rule_key", "quantity", "occurred_on"])
+submit("/incentives/earnings", ADMIN, f, {"staff_id": "st-1", "rule_key": "review", "quantity": "50", "ref_label": "E2E batch of reviews", "occurred_on": str(TODAY)})
+submit("/incentives/earnings", ADMIN, f, {"staff_id": "st-1", "rule_key": "interview", "quantity": "1", "ref_label": "E2E fake interview", "occurred_on": str(TODAY)})
+s, loc, _ = submit("/incentives/earnings", ADMIN, f, {"staff_id": "st-1", "rule_key": "review", "quantity": "1", "occurred_on": "0006-02-20"})
+check("activity with an impossible year is refused", "saved=logged" not in (loc or ""))
+_, _, html = get("/incentives/admin", ADMIN)
+check("logged activities wait in the approval queue", "E2E batch of reviews" in html and "E2E fake interview" in html)
+forms = forms_of(html)
+def queue_form(label, btn):
+    i = html.index(label)
+    for fm in forms:
+        if any(btn.lower() in b["text"].lower() for b in fm["buttons"]) and fm["start"] > i:
+            return fm
+f = queue_form("E2E batch of reviews", "Approve")
+submit("/incentives/admin", ADMIN, f, button="Approve")
+_, _, html = get("/incentives/admin", ADMIN)
+forms = forms_of(html)
+submit("/incentives/admin", ADMIN, queue_form("E2E fake interview", "Reject"), button="Reject")
+_, _, html = get("/incentives/earnings?staff=st-1", ADMIN)
+t = text(html)
+check("approved reviews earn ₹10 each", re.search(r"E2E batch of reviews[\s\S]{0,80}50[\s\S]{0,40}500", t) is not None)
+check("reaching 50 reviews adds the milestone incentive", "Milestone: 50 reviews" in t)
+check("rejected activity shows as rejected", re.search(r"E2E fake interview[\s\S]{0,120}rejected", t) is not None)
+
+# admin edits a rule and a target
+_, _, html = get("/incentives/admin", ADMIN)
+f = find_form(html, must=["amount.review"])
+submit("/incentives/admin", ADMIN, f, {"amount.review": "20"})
+_, _, html = get("/incentives?staff=st-1", ADMIN)
+check("rule change shows on the dashboard", re.search(r"Student review \(internal\)[\s\S]{0,40}₹20", text(html)) is not None)
+_, _, html = get(f"/incentives/admin?scope_staff=st-1&scope_month={str(TODAY)[:7]}", ADMIN)
+f = find_form(html, must=["target.admissions", "scope_staff"])
+submit("/incentives/admin", ADMIN, f, {"target.admissions": "10"})
+_, _, html = get("/incentives?staff=st-1", ADMIN)
+check("per-person monthly target applies", re.search(r"Admissions \(target 10 ?\) 1?\d+ / 10\b", text(html)) is not None)
+_, _, html = get("/incentives?staff=st-2", ADMIN)
+check("other staff keep the default target", re.search(r"Admissions \(target 40 ?\)", text(html)) is not None)
+
+# month-end payout
+_, _, html = get("/incentives/admin", ADMIN)
+i = html.index("Payouts")
+f = next(fm for fm in forms_of(html) if fm["start"] > i and any("Mark paid" in b["text"] for b in fm["buttons"]))
+seg = html[:f["start"]]
+who = re.sub(r"<[^>]+>", " ", seg[seg.rfind("<tr"):]).split("₹")[0].strip()
+s, loc, _ = submit("/incentives/admin", ADMIN, f, button="Mark paid")
+_, _, html = get(loc, ADMIN)
+row = next((r for r in re.findall(r"<tr[\s\S]*?</tr>", html) if who and who in r and "Settled" in r), None)
+check("payout marked paid", "Marked as paid" in html and row is not None, who)
 
 passed = sum(1 for r in results if r[1])
 print(f"\n{passed}/{len(results)} checks passed")

@@ -77,6 +77,17 @@ export async function createStudentAction(form: FormData) {
   if (input.category === "corporate" && !input.client_id) throw new Error("Pick the company for a corporate student");
 
   const s = await repo.createStudent({ ...input, allocations });
+  // HR commission: a converted lead credits its assigned HR (stage by stage); a direct admission credits the chosen HR.
+  const counsellor = field("counsellor_id");
+  if (counsellor) await repo.updateStudent(s.id, { counsellor_id: counsellor });
+  {
+    const { createIncentiveRepo } = await import("@/lib/incentives");
+    const { getStore } = await import("@/lib/session");
+    const inc = createIncentiveRepo(await getStore());
+    const leadForCredit = field("lead_id") ? await repo.one<import("@/lib/types").Lead>("leads", field("lead_id")) : null;
+    if (leadForCredit) await inc.creditLeadStage(leadForCredit, "enrolled", { category: input.category, studentLabel: `${s.full_name} – admission` }).catch(() => null);
+    else if (counsellor && field("commission_type")) await inc.creditAdmission({ id: s.id, full_name: s.full_name, category: input.category }, counsellor, field("commission_type")).catch(() => null);
+  }
   if (input.category === "corporate" && field("company_designation")) await repo.updateStudent(s.id, { extra: { company_designation: field("company_designation") } });
   const enquiryId = String(form.get("enquiry_id") || "");
   if (enquiryId) await repo.setEnquiry(enquiryId, { status: "admitted", student_id: s.id });

@@ -1,5 +1,6 @@
 "use client";
 
+import { ADMISSION_COMMISSION } from "@/lib/types-incentives";
 import { useMemo, useState } from "react";
 import { Card } from "@/components/ui";
 import { inr, todayISO } from "@/lib/format";
@@ -12,9 +13,9 @@ import { CollegeDetails, CompanyDetails } from "./org-details";
 
 export type AdmissionDefaults = { enquiry_id?: string; lead_id?: string; source?: string; full_name?: string; email?: string; phone?: string; city?: string; course_code?: string };
 
-export function AdmissionForm({ courses, batches, vendors, defaults = {}, branches = [], colleges = [], clients = [], kacha = false, designations = [], canRemove = false }: {
+export function AdmissionForm({ courses, batches, vendors, defaults = {}, branches = [], colleges = [], clients = [], kacha = false, designations = [], canRemove = false, hrStaff = [], meStaffId }: {
   courses: Course[]; batches: Batch[]; vendors: Vendor[]; defaults?: AdmissionDefaults;
-  branches?: Branch[]; colleges?: College[]; clients?: Client[]; kacha?: boolean; designations?: string[]; canRemove?: boolean;
+  branches?: Branch[]; colleges?: College[]; clients?: Client[]; kacha?: boolean; designations?: string[]; canRemove?: boolean; hrStaff?: { id: string; full_name: string }[]; meStaffId?: string;
 }) {
   const [category, setCategory] = useState<"normal" | "college" | "corporate">("normal");
   const [courseId, setCourseId] = useState(courses.find((c) => c.code === defaults.course_code)?.id ?? courses[0]?.id ?? "");
@@ -82,6 +83,23 @@ export function AdmissionForm({ courses, batches, vendors, defaults = {}, branch
             </select>
           </div>
           <div><label className="label">Referred by</label><input name="referred_by" className="input" /></div>
+          <div>
+            <label className="label" htmlFor="counsellor_id">Admitted by (HR / counsellor)</label>
+            <select id="counsellor_id" name="counsellor_id" defaultValue={meStaffId ?? ""} className="input">
+              <option value="">—</option>
+              {hrStaff.map((h) => <option key={h.id} value={h.id}>{h.full_name}</option>)}
+            </select>
+          </div>
+          {defaults.lead_id ? (
+            <p className="self-end text-[11px] text-muted">Commission for this lead is credited automatically to the HR it is assigned to (Lead → Interested → Visited → Admission).</p>
+          ) : (
+            <div>
+              <label className="label" htmlFor="commission_type">HR commission</label>
+              <select id="commission_type" name="commission_type" defaultValue="admission_individual" className="input">
+                {ADMISSION_COMMISSION.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+          )}
         </div>
       </Card>
 

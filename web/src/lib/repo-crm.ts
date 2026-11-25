@@ -99,6 +99,9 @@ export function createCrmRepo(db: Store) {
       const now = new Date().toISOString();
       await db.update<Lead>("leads", { id }, { stage, stage_dates: { ...lead.stage_dates, [stage]: now } });
       await crm.addLeadActivity(id, "stage", `Moved to ${stage}`, stage, by);
+      // Lead-to-admission commission for the HR the lead is assigned to (300 / 300 / 400 by default).
+      const { createIncentiveRepo } = await import("./incentives");
+      await createIncentiveRepo(db).creditLeadStage(lead, stage, { by }).catch(() => null);
     },
     addLeadActivity: (lead_id: string, kind: string, summary: string, outcome?: string | null, by_name?: string | null) =>
       db.insert<LeadActivity>("lead_activities", [{ lead_id, kind, summary, outcome: outcome ?? null, by_name: by_name ?? null, created_at: new Date().toISOString() }]),

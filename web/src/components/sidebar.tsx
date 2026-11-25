@@ -45,7 +45,7 @@ import {
   Receipt,
   Send,
   Wallet,
-  type LucideIcon, CalendarRange } from "lucide-react";
+  type LucideIcon, CalendarRange, Trophy, HandCoins } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -116,6 +116,13 @@ const staffNav: Section[] = [
       { href: "/hr-contacts", label: "HR & Company Contacts", icon: Contact },
       { href: "/ambassadors", label: "Brand Ambassadors", icon: Crown },
       { href: "/communication", label: "Communication", icon: MessageCircle },
+    ],
+  },
+  {
+    title: "HR Incentives",
+    items: [
+      { href: "/incentives", label: "HR Dashboard", icon: Trophy },
+      { href: "/incentives/earnings", label: "Commission & Earnings", icon: HandCoins },
     ],
   },
   {
@@ -190,7 +197,7 @@ export function Sidebar({ role, name, demo, signOut }: { role: string; name: str
             <div className="px-2 pb-1.5 text-[11px] font-medium tracking-wide text-slate-400 uppercase">{sec.title}</div>
             <div className="space-y-0.5">
               {sec.items.map(({ href, label, icon: Icon }) => {
-                const active = path === href || (href !== "/portal" && href !== "/finance" && path.startsWith(href + "/"));
+                const active = path === href || (href !== "/portal" && href !== "/finance" && href !== "/incentives" && path.startsWith(href + "/"));
                 return (
                   <Link
                     key={href}
