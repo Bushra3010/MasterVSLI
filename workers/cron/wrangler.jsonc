@@ -5,10 +5,10 @@
   "account_id": "843f60cf5c636f182e60e530d26209f6",
   "main": "src/index.ts",
   "compatibility_date": "2026-11-01",
-  // 00:30 UTC = 06:00 IST
+  // 00:30 UTC = 06:00 IST daily job; hourly calendar reminders
   // No public URL: this worker only runs on its schedule.
   "workers_dev": false,
-  "triggers": { "crons": ["30 0 * * *"] },
+  "triggers": { "crons": ["30 0 * * *", "0 * * * *"] },
   "vars": { "ERP_URL": "https://mastervlsi-erp.mastervlsi-erp.workers.dev" }
   // secret: npx wrangler secret put CRON_SECRET
 }

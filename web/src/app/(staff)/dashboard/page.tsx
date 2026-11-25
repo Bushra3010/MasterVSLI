@@ -25,10 +25,13 @@ import {
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui";
-import { addDays, addMonths, daysBetween, fmtDate, inr, todayISO } from "@/lib/format";
+import { addDays, addMonths, daysBetween, fmtDate, inr, istDate, todayISO } from "@/lib/format";
 import { templateMeta } from "@/lib/letters";
 import { getRepo } from "@/lib/server";
-import { getSession } from "@/lib/session";
+import { getSession, getStore } from "@/lib/session";
+import { createCalendarRepo, whenText } from "@/lib/calendar";
+import { categoryOf, istToUtc } from "@/lib/types-calendar";
+import { setEventDoneAction } from "../calendar/actions";
 import { decideLeaveAction } from "../module-actions";
 
 export const metadata = { title: "Admin Dashboard" };
@@ -82,6 +85,12 @@ export default async function Dashboard() {
     repo.messages(),
     repo.notifications(),
   ]);
+  const cal = createCalendarRepo(await getStore());
+  const [calMonth, calPending] = await Promise.all([
+    // The calendar must never take the dashboard down (e.g. before its table exists).
+    cal.between(istToUtc(addDays(today.slice(0, 8) + "01", -7)), istToUtc(addDays(today.slice(0, 8) + "01", 45))).catch(() => []),
+    cal.pending().catch(() => []),
+  ]);
   const name = new Map(students.map((s) => [s.id, s]));
   const staffName = new Map(staff.map((s) => [s.id, s]));
 
@@ -102,6 +111,7 @@ export default async function Dashboard() {
   const events = [
     ...drives.filter((d) => d.drive_date).map((d) => ({ date: d.drive_date!, title: `${d.company} drive`, sub: d.job_role, icon: Briefcase, tone: "border-brand", href: `/placements?drive=${d.id}` })),
     ...batches.filter((b) => b.start_date).map((b) => ({ date: b.start_date!, title: `${b.name} starts`, sub: courses.find((c) => c.id === b.course_id)?.name ?? "", icon: Layers, tone: "border-emerald-500", href: "/courses" })),
+    ...calMonth.filter((e) => !e.done).map((e) => ({ date: istDate(e.start_at), title: e.title, sub: `${categoryOf(e.category).label} · ${staffName.get(e.assignee_id ?? "")?.full_name ?? "Unassigned"}`, icon: CalendarDays, tone: "border-violet-500", href: `/calendar?date=${istDate(e.start_at)}&event=${e.id}` })),
     ...leaves.filter((l) => l.status === "approved").map((l) => ({ date: l.from_date, title: `${staffName.get(l.staff_id)?.full_name ?? "Staff"} on leave`, sub: l.leave_type, icon: UserCog, tone: "border-amber-500", href: "/hr" })),
   ];
   const dueDays = new Set(ledger.installments.filter((i) => i.status !== "paid").map((i) => i.due_date));
@@ -251,7 +261,8 @@ export default async function Dashboard() {
 
       {/* schedules · attendance · quick links */}
       <div className="mt-5 grid gap-5 xl:grid-cols-3">
-        <Panel title="Schedules" action={<span className="text-xs text-muted">{new Date(first + "T00:00:00Z").toLocaleDateString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" })}</span>}>
+        <Panel title="Schedules" action={<Link href="/calendar" className="text-xs text-brand hover:underline">Open calendar</Link>}>
+          <div className="-mt-1 mb-2 text-xs text-muted">{new Date(first + "T00:00:00Z").toLocaleDateString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" })}</div>
           <div className="grid grid-cols-7 gap-y-1 text-center text-xs">
             {["S", "M", "T", "W", "T", "F", "S"].map((d, k) => <div key={k} className="pb-1 font-medium text-navy">{d}</div>)}
             {cells.map((d) => {
@@ -282,7 +293,7 @@ export default async function Dashboard() {
                 </div>
               </Link>
             ))}
-            {!upcoming.length && <p className="text-xs text-muted">No upcoming drives, batch starts or approved leave.</p>}
+            {!upcoming.length && <p className="text-xs text-muted">No upcoming events, drives, batch starts or approved leave.</p>}
           </div>
         </Panel>
 
@@ -316,6 +327,24 @@ export default async function Dashboard() {
         </Panel>
 
         <div className="space-y-5">
+          <Panel title={`Pending Reminders (${calPending.length})`} action={<ViewAll href="/calendar" />} bodyClass="p-0">
+            <ul className="divide-y divide-line">
+              {calPending.slice(0, 5).map((e) => (
+                <li key={e.id} className="flex items-center gap-2 px-4 py-2.5 text-[13px]">
+                  <span className={`size-2 shrink-0 rounded-full ${categoryOf(e.category).dot}`} />
+                  <Link href={`/calendar?date=${istDate(e.start_at)}&event=${e.id}`} className="min-w-0 flex-1">
+                    <div className="truncate font-medium text-navy">{e.title}</div>
+                    <div className="truncate text-[11px] text-muted">{whenText(e)} · {staffName.get(e.assignee_id ?? "")?.full_name ?? "Unassigned"}</div>
+                  </Link>
+                  <form action={setEventDoneAction.bind(null, e.id, true)}>
+                    <input type="hidden" name="back" value="/calendar" />
+                    <button className="rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-[11px] text-emerald-800 hover:bg-emerald-100">Done</button>
+                  </form>
+                </li>
+              ))}
+              {!calPending.length && <li className="px-4 py-3 text-xs text-muted">No reminders due.</li>}
+            </ul>
+          </Panel>
           <Panel title="Quick Links">
             <div className="grid grid-cols-3 gap-3">
               {quickLinks.map((q, k) => (

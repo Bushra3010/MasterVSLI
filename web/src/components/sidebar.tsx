@@ -45,8 +45,7 @@ import {
   Receipt,
   Send,
   Wallet,
-  type LucideIcon,
-} from "lucide-react";
+  type LucideIcon, CalendarRange } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -64,6 +63,7 @@ const staffNav: Section[] = [
       { href: "/reports", label: "Reports & Analytics", icon: BarChart3 },
       { href: "/alerts", label: "Alerts & Escalation", icon: BellRing },
       { href: "/me", label: "My Workspace", icon: ListTodo },
+      { href: "/calendar", label: "Calendar & Reminders", icon: CalendarRange },
     ],
   },
   {

@@ -83,7 +83,9 @@ export type TableName =
   // enhanced profile
   | "master_options"
   | "student_applications"
-  | "student_notes";
+  | "student_notes"
+  // staff calendar
+  | "calendar_events";
 
 export interface Query {
   eq?: Record<string, string | number | boolean | null>;

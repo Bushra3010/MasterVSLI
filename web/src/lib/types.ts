@@ -1,5 +1,6 @@
 export * from "./types-crm";
 export * from "./types-profile";
+export * from "./types-calendar";
 import type { Company, FeeAccount, StudentCategory } from "./types-crm";
 export type Role = "super_admin" | "admin" | "staff" | "student" | "college";
 export type StudentStatus = "active" | "on_hold" | "expired" | "completed" | "dropped";
