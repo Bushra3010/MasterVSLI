@@ -72,7 +72,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
             {tpl.fields.map((f) => (
               <div key={f.key}>
                 <label className="label">{f.label}</label>
-                <input name={`d_${f.key}`} type={f.type ?? "text"} placeholder={f.placeholder} className="input" />
+                <input name={`d_${f.key}`} type={f.type ?? "text"} placeholder={f.placeholder} {...(f.type === "date" ? { min: "1990-01-01", max: "2100-12-31" } : {})} className="input" />
               </div>
             ))}
             {tpl.audience === "staff" && !staff.length && (

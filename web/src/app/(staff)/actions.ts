@@ -161,6 +161,11 @@ export async function issueLetterAction(form: FormData) {
   const subject = String(form.get("subject") || "");
   const data: Record<string, string> = {};
   for (const [k, v] of form.entries()) if (k.startsWith("d_") && String(v)) data[k.slice(2)] = String(v);
+  for (const [k, v] of Object.entries(data))
+    if (/^\d{4,}-\d{2}-\d{2}$/.test(v) || /^0\d{3}-/.test(v)) {
+      const y = Number(v.slice(0, v.indexOf("-")));
+      if (y < 1990 || y > 2100) throw new Error(`Check the year in "${k}" — ${v} doesn't look right`);
+    }
   const target = subject.startsWith("staff:") ? { staff_id: subject.slice(6) } : { student_id: subject.replace(/^student:/, "") };
   const l = await (await getRepo()).issueLetter(template, target, data);
   revalidatePath("/documents");

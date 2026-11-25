@@ -11,7 +11,7 @@ export default async function ApplyPage({ searchParams }: PageProps<"/apply">) {
     <main className="grid min-h-screen place-items-center bg-canvas p-4">
       <div className="w-full max-w-md rounded-[5px] border border-line bg-white p-6 shadow-sm">
         <div className="mb-5 flex items-center gap-2">
-          <Image src="/logo-full.svg" alt="MasterVLSI — Leader In Semiconductor Industry" width={220} height={55} unoptimized priority className="h-12 w-auto" />
+          <Image src="/logo-official.png" alt="MasterVLSI — Leader In Semiconductor Industry" width={220} height={52} unoptimized priority className="h-12 w-auto" />
         </div>
         {sp.sent ? (
           <div className="rounded-[5px] bg-emerald-50 p-4 text-sm text-emerald-800">

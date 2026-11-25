@@ -182,13 +182,7 @@ export function Sidebar({ role, name, demo, signOut }: { role: string; name: str
   const body = (
     <div className="flex h-full flex-col">
       <div className="flex h-[60px] shrink-0 items-center gap-2 border-b border-line px-4">
-        <Image src="/logo-mark.svg" alt="MasterVLSI" width={34} height={34} unoptimized className="rounded border border-line" />
-        <div className="leading-tight">
-          <div className="text-[15px] font-bold text-navy">
-            Master<span className="text-brand">VLSI</span>
-          </div>
-          <div className="text-[10px] text-muted">Training & Placement ERP</div>
-        </div>
+        <Image src="/logo-official.png" alt="MasterVLSI — Leader In Semiconductor Industry" width={190} height={45} unoptimized priority className="h-10 w-auto" />
       </div>
       <nav className="flex-1 overflow-y-auto px-3 py-3">
         {nav.map((sec) => (

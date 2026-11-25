@@ -477,9 +477,9 @@ check("new college offered on the next admission", "E2E Engineering College" in 
 # 20. full logo everywhere
 for p, ck in [("/login", ""), ("/dashboard", ADMIN), (f"/documents/{serial}", ADMIN), ("/verify/" + serial, "")]:
     _, _, html = get(p, ck)
-    check(f"full logo on {p.split('/')[1] or 'login'}", "logo-full.svg" in html or "logo-mark.svg" in html)
-s, h, raw = http("GET", "/logo-full.svg", "")
-check("logo file contains the complete name", s == 200 and b"MASTERVLSI" in raw and b"Industry" in raw)
+    check(f"full logo on {p.split('/')[1] or 'login'}", "logo-official.png" in html)
+s, h, raw = http("GET", "/logo-official.png", "")
+check("official logo image is served", s == 200 and raw[:8] == b"\x89PNG\r\n\x1a\n" and len(raw) > 20000)
 
 # 21. finance & fund flow (admin only)
 def money(txt):

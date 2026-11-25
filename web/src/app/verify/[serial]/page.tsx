@@ -32,7 +32,7 @@ export default async function VerifyPage({ params }: PageProps<"/verify/[serial]
   return (
     <main className="grid min-h-screen place-items-center p-4">
       <div className="w-full max-w-md rounded-2xl border border-line bg-white p-6 text-center shadow-lg">
-        <Image src="/logo-full.svg" alt="MasterVLSI — Leader In Semiconductor Industry" width={240} height={60} unoptimized priority className="mx-auto h-14 w-auto" />
+        <Image src="/logo-official.png" alt="MasterVLSI — Leader In Semiconductor Industry" width={240} height={57} unoptimized priority className="mx-auto h-14 w-auto" />
         <h1 className="mt-2 text-lg font-semibold text-navy">Document verification</h1>
         {valid ? (
           <>

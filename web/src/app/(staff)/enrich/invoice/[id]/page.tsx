@@ -24,7 +24,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
       <div className="mx-auto max-w-3xl rounded-lg border border-line bg-white p-8 text-sm shadow-sm print:border-0 print:shadow-none">
         <div className="flex items-start justify-between border-b-2 border-brand pb-4">
           <div className="flex items-center gap-3">
-            {inv.company === "mastervlsi" && <Image src="/logo-mark.svg" alt="MasterVLSI" width={44} height={44} unoptimized className="rounded border border-line" />}
+            {inv.company === "mastervlsi" && <Image src="/logo-mark.png" alt="MasterVLSI" width={44} height={44} unoptimized className="rounded border border-line" />}
             <div>
               <div className="text-lg font-bold text-navy">{co?.legal_name ?? (inv.company === "enrich" ? "Enrich Silicon" : "MasterVLSI")}</div>
               <div className="text-xs text-muted">{co?.address}</div>

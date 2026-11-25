@@ -48,7 +48,7 @@ export default async function StudentReport({ params }: { params: Promise<{ id: 
       </div>
       <article className="mx-auto max-w-4xl rounded-[5px] border border-line bg-white p-8 shadow-sm print:max-w-none print:border-0 print:p-0 print:shadow-none">
         <header className="flex flex-wrap items-center justify-between gap-4 border-b-4 border-brand pb-3">
-          <Image src="/logo-full.svg" alt="MasterVLSI — Leader In Semiconductor Industry" width={240} height={60} unoptimized priority className="h-14 w-auto" />
+          <Image src="/logo-official.png" alt="MasterVLSI — Leader In Semiconductor Industry" width={240} height={57} unoptimized priority className="h-14 w-auto" />
           <div className="text-right">
             <div className="text-lg font-semibold text-navy">Student Report</div>
             <div className="text-xs text-muted">Generated {fmtDate(new Date().toISOString())} at {istTime(new Date().toISOString())} IST</div>

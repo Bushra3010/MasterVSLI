@@ -8,7 +8,7 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 export const metadata: Metadata = {
   title: { default: "MasterVLSI ERP", template: "%s · MasterVLSI ERP" },
   description: "Training institute ERP — students, attendance, fees, placements and certificates.",
-  icons: { icon: [{ url: "/logo-mark.svg", type: "image/svg+xml" }, { url: "/icon-192.png", sizes: "192x192" }], apple: "/apple-touch-icon.png" },
+  icons: { icon: [{ url: "/logo-mark.png", type: "image/png" }, { url: "/icon-192.png", sizes: "192x192" }], apple: "/apple-touch-icon.png" },
   appleWebApp: { capable: true, title: "MasterVLSI", statusBarStyle: "default" },
 };
 
