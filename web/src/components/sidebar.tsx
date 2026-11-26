@@ -45,7 +45,7 @@ import {
   Receipt,
   Send,
   Wallet,
-  type LucideIcon, CalendarRange, Trophy, HandCoins } from "lucide-react";
+  type LucideIcon, CalendarRange, Trophy, HandCoins, ListChecks, TriangleAlert } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -172,9 +172,19 @@ const studentNav: Section[] = [
     ],
   },
   {
-    title: "Earn & Account",
+    title: "Earn & Rewards",
     items: [
       { href: "/portal/earn", label: "Earn & Rewards", icon: Gift },
+      { href: "/portal/earn/activities", label: "My Activities", icon: ListChecks },
+      { href: "/portal/earn/history", label: "Rewards History", icon: History },
+      { href: "/portal/earn/ambassador", label: "Brand Ambassador", icon: Crown },
+      { href: "/portal/earn#mentorship", label: "Mentorship", icon: GraduationCap },
+      { href: "/portal/earn#incident", label: "Report an Incident", icon: TriangleAlert },
+    ],
+  },
+  {
+    title: "Account",
+    items: [
       { href: "/portal/terms", label: "Terms & Conditions", icon: ScrollText },
       { href: "/portal/account", label: "Account", icon: KeyRound },
     ],
@@ -197,7 +207,7 @@ export function Sidebar({ role, name, demo, signOut }: { role: string; name: str
             <div className="px-2 pb-1.5 text-[11px] font-medium tracking-wide text-slate-400 uppercase">{sec.title}</div>
             <div className="space-y-0.5">
               {sec.items.map(({ href, label, icon: Icon }) => {
-                const active = path === href || (href !== "/portal" && href !== "/finance" && href !== "/incentives" && path.startsWith(href + "/"));
+                const active = path === href || (href !== "/portal" && href !== "/finance" && href !== "/incentives" && href !== "/portal/earn" && path.startsWith(href + "/"));
                 return (
                   <Link
                     key={href}

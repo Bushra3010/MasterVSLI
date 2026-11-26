@@ -33,6 +33,7 @@ import { buildFinanceSeed, type FinanceTables } from "./seed-finance";
 import { buildProfileSeed, type ProfileTables } from "./seed-profile";
 import { buildCalendarSeed, type CalendarTables } from "./seed-calendar";
 import { buildIncentiveSeed, type IncentiveTables } from "./seed-incentives";
+import { buildRewardSeed, type RewardTables } from "./seed-rewards";
 
 /** Deterministic PRNG so demo data is stable across reloads. */
 function rng(seed: number) {
@@ -45,7 +46,7 @@ function rng(seed: number) {
   };
 }
 
-export interface DemoTables extends CrmTables, FinanceTables, ProfileTables, CalendarTables, IncentiveTables {
+export interface DemoTables extends CrmTables, FinanceTables, ProfileTables, CalendarTables, IncentiveTables, RewardTables {
   courses: Course[];
   batches: Batch[];
   vendors: Vendor[];
@@ -376,6 +377,7 @@ export function buildSeed(): DemoTables {
     ...buildProfileSeed(today, students),
     ...buildCalendarSeed(today, staff),
     ...buildIncentiveSeed(today, staff),
+    ...buildRewardSeed(today, students),
     courses,
     batches,
     vendors,

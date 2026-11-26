@@ -2,6 +2,7 @@ export * from "./types-crm";
 export * from "./types-profile";
 export * from "./types-calendar";
 export * from "./types-incentives";
+export * from "./types-rewards";
 import type { Company, FeeAccount, StudentCategory } from "./types-crm";
 export type Role = "super_admin" | "admin" | "staff" | "student" | "college";
 export type StudentStatus = "active" | "on_hold" | "expired" | "completed" | "dropped";

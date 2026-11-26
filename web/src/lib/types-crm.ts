@@ -48,10 +48,12 @@ export interface HrContact {
 export interface HrHistory { id: string; hr_id: string; company: string; designation?: string | null; from_date?: string | null; to_date?: string | null }
 export interface HrCall { id: string; hr_id: string; call_date: string; activity: string; outcome?: string | null; remarks?: string | null }
 
-export type AmbassadorKind = "referral" | "review" | "social" | "mentor";
+export type AmbassadorKind = "referral" | "review" | "social" | "mentor" | "feedback" | "incident";
 export interface AmbassadorActivity {
   id: string; student_id: string; kind: AmbassadorKind; details: string; proof_url?: string | null; reward_amount: number; gift?: string | null;
   status: "pending" | "approved" | "credited" | "delivered" | "rejected"; created_at: string;
+  /** Activity details (referral contact, social counts, mentorship dates, incident report…). */
+  data?: Record<string, string | number | boolean | null>; decided_by?: string | null; decided_at?: string | null;
 }
 
 export interface CourseModule { id: string; course_id: string; seq: number; name: string; total_videos: number }

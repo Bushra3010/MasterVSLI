@@ -89,7 +89,11 @@ export type TableName =
   // HR incentives
   | "hr_commission_rules"
   | "hr_commissions"
-  | "hr_targets";
+  | "hr_targets"
+  // earn & rewards
+  | "reward_settings"
+  | "reward_program"
+  | "reward_goodies";
 
 export interface Query {
   eq?: Record<string, string | number | boolean | null>;

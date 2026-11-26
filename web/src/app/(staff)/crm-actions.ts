@@ -102,29 +102,42 @@ export async function setPlacementGroupAction(studentId: string, value: "request
 }
 
 // ---- brand ambassador ------------------------------------------------------------------------
-const REWARD: Record<string, { amount: number; gift?: string }> = { referral: { amount: 2000 }, review: { amount: 0, gift: "Gift on every 3 reviews" }, social: { amount: 100 }, mentor: { amount: 1000 } };
+const REWARD: Record<string, { amount: number; gift?: string }> = { referral: { amount: 2000 }, review: { amount: 0 }, social: { amount: 0 }, mentor: { amount: 0 }, feedback: { amount: 0 }, incident: { amount: 0 } };
 
 export async function decideAmbassadorAction(id: string, status: AmbassadorActivity["status"], form?: FormData) {
-  await requireStaff();
+  const me = await requireStaff();
   const repo = await getRepo();
   const row = await repo.one<AmbassadorActivity>("ambassador_activities", id);
   if (!row) return;
   const amount = form?.get("reward_amount");
-  const patch: Partial<AmbassadorActivity> = { status };
+  const patch: Partial<AmbassadorActivity> = { status, decided_by: me.name, decided_at: new Date().toISOString() };
   if (amount !== null && amount !== undefined && String(amount) !== "") patch.reward_amount = Number(amount);
-  else if (status === "approved" && !row.reward_amount) patch.reward_amount = REWARD[row.kind]?.amount ?? 0;
+  else if (status === "approved" && !row.reward_amount) {
+    // Cash rewards come from the admin's reward settings (e.g. ₹2,000 per referral admission).
+    const { createRewardsRepo } = await import("@/lib/rewards");
+    const { KIND_SETTING } = await import("@/lib/types-rewards");
+    const { getStore } = await import("@/lib/session");
+    const setting = await createRewardsRepo(await getStore()).setting(KIND_SETTING[row.kind]);
+    patch.reward_amount = setting?.reward_type === "amount" ? Number(setting.reward_amount) : (REWARD[row.kind]?.amount ?? 0);
+  }
   const { getStore } = await import("@/lib/session");
   await (await getStore()).update("ambassador_activities", { id }, patch);
   // Credited rewards are paid out from Accounts.
   if (status === "credited" && Number(patch.reward_amount ?? row.reward_amount) > 0)
     await repo.addFinanceEntry({ kind: "expense", category: "Ambassador rewards", amount: Number(patch.reward_amount ?? row.reward_amount), entry_date: todayISO(), vendor_id: null, reference: `AMB-${id.slice(0, 8)}`, note: row.details });
+  // Verified activities can complete a goodie (e.g. 4 feedbacks, 10,000 social activities, a verified incident).
+  {
+    const { createRewardsRepo } = await import("@/lib/rewards");
+    const { getStore: store } = await import("@/lib/session");
+    await createRewardsRepo(await store()).syncGoodies(row.student_id);
+  }
   refresh();
 }
 
 export async function addAmbassadorAction(form: FormData) {
   await requireStaff();
   const a = z
-    .object({ student_id: z.string().min(1), kind: z.enum(["referral", "review", "social", "mentor"]), details: z.string().trim().min(3) })
+    .object({ student_id: z.string().min(1), kind: z.enum(["referral", "review", "social", "mentor", "feedback", "incident"]), details: z.string().trim().min(3) })
     .parse(Object.fromEntries(form));
   // An empty reward box means "use the standard reward for this activity" (₹2,000 referral, ₹100 social, ₹1,000 mentor; reviews earn gifts).
   const typed = String(form.get("reward_amount") ?? "").trim();

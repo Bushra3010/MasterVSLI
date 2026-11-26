@@ -215,6 +215,14 @@ export function buildCrmSeed(today: string, r: () => number, students: Student[]
     { id: "am-3", student_id: students[0].id, kind: "social", details: "Liked, subscribed & shared (week 2)", reward_amount: 100, gift: null, status: "credited", created_at: ts(-10) },
     { id: "am-4", student_id: students[1].id, kind: "mentor", details: "Guided 1 student (UVM project)", reward_amount: 1000, gift: null, status: "approved", created_at: ts(-2) },
     { id: "am-5", student_id: students[2].id, kind: "referral", details: "Referred Manjunath P (visited)", reward_amount: 0, gift: null, status: "pending", created_at: ts(-1) },
+    // Earn & Rewards demo for the first student: feedback cycle, social media counts, a referral
+    { id: "am-6", student_id: students[0].id, kind: "feedback", details: "Trainer explains UVM very clearly; labs are well organised.", reward_amount: 0, gift: null, status: "approved", created_at: ts(-12), data: { text: "Trainer explains UVM very clearly; labs are well organised." } },
+    { id: "am-7", student_id: students[0].id, kind: "feedback", details: "Mock interviews helped a lot.", reward_amount: 0, gift: null, status: "approved", created_at: ts(-9), data: { text: "Mock interviews helped a lot." } },
+    { id: "am-8", student_id: students[0].id, kind: "feedback", details: "Good placement support.", reward_amount: 0, gift: null, status: "approved", created_at: ts(-6), data: { text: "Good placement support." } },
+    { id: "am-9", student_id: students[0].id, kind: "feedback", details: "Would like more weekend doubt sessions.", reward_amount: 0, gift: null, status: "pending", created_at: ts(-1), data: { text: "Would like more weekend doubt sessions." } },
+    { id: "am-10", student_id: students[0].id, kind: "social", details: "YouTube – 2,500 likes, 2,500 shares, 2,000 subscribes", reward_amount: 0, gift: null, status: "approved", created_at: ts(-8), data: { platform: "youtube", likes: 2500, shares: 2500, subscribes: 2000 } },
+    { id: "am-11", student_id: students[0].id, kind: "social", details: "Instagram – 500 / 500 / 500", reward_amount: 0, gift: null, status: "approved", created_at: ts(-8), data: { platform: "instagram", likes: 500, shares: 500, subscribes: 500 } },
+    { id: "am-12", student_id: students[0].id, kind: "social", details: "Facebook – 500 / 500 / 500", reward_amount: 0, gift: null, status: "approved", created_at: ts(-8), data: { platform: "facebook", likes: 500, shares: 500, subscribes: 500 } },
   ];
 
   const course_modules: CourseModule[] = [];

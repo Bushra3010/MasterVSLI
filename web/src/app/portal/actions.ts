@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import type { AmbassadorKind } from "@/lib/types";
 import QRCode from "qrcode";
 import { syncDriveToSheet } from "@/lib/integrations/google-sheets";
 import { getServiceRepo, getStudentReadRepo } from "@/lib/server";
@@ -99,25 +100,80 @@ export async function payOnlineAction(installmentId: string): Promise<PayResult>
   return { ok: false, message: "Online payment isn't set up yet. Please pay at the office." };
 }
 
-// ---- brand ambassador (student submits; staff approve) ------------------------------------------
-export async function submitAmbassadorAction(_: unknown, form: FormData): Promise<{ ok: boolean; message: string }> {
+// ---- earn & rewards (student submits; office verifies) ------------------------------------------
+function earnBack(section: string, msg: string, ok = true): never {
+  redirect(`/portal/earn?${ok ? "saved" : "error"}=${encodeURIComponent(msg)}#${section}`);
+}
+
+/** Saves one activity after checking the program and this activity are open. */
+async function submitEarn(kind: AmbassadorKind, section: string, details: string, data: Record<string, string | number | boolean | null>, proof?: string | null) {
   const s = await requireStudent();
-  const kind = String(form.get("kind") || "");
-  const details = String(form.get("details") || "").trim();
-  const proof = String(form.get("proof_url") || "").trim();
-  if (!["referral", "review", "social", "mentor"].includes(kind)) return { ok: false, message: "Pick an activity." };
-  if (details.length < 3) return { ok: false, message: "Add a few details (e.g. friend's name and phone, or the review link)." };
-  if (proof && !/^https?:\/\//.test(proof)) return { ok: false, message: "Proof link must start with http(s)://" };
-  const repo = getServiceRepo();
+  const { createRewardsRepo } = await import("@/lib/rewards");
   const { getServiceStore } = await import("@/lib/session");
-  await getServiceStore().insert("ambassador_activities", [{ student_id: s.studentId, kind, details: details.slice(0, 500), proof_url: proof || null, reward_amount: 0, status: "pending", created_at: new Date().toISOString() }]);
+  const { KIND_SETTING } = await import("@/lib/types-rewards");
+  const rewards = createRewardsRepo(getServiceStore());
+  const [setting, program] = await Promise.all([rewards.setting(KIND_SETTING[kind]), rewards.program()]);
+  const today = new Date().toISOString().slice(0, 10);
+  if (!setting.active || setting.paused) earnBack(section, `${setting.label} is ${setting.paused ? "paused" : "not open"} right now.`, false);
+  if ((program.valid_from && today < program.valid_from) || (program.valid_to && today > program.valid_to)) earnBack(section, "The Earn & Rewards program is not running right now.", false);
+  if (proof && !/^https?:\/\//.test(proof)) earnBack(section, "Links must start with http:// or https://", false);
+  await getServiceStore().insert("ambassador_activities", [{ student_id: s.studentId, kind, details: details.slice(0, 500), proof_url: proof || null, reward_amount: 0, status: "pending", data, created_at: new Date().toISOString() }]);
+  revalidatePath("/portal/earn", "layout");
+  return s;
+}
+const f = (form: FormData, k: string) => String(form.get(k) ?? "").trim();
+
+export async function submitReferralAction(form: FormData) {
+  const name = f(form, "name"), phone = f(form, "phone").replace(/[^\d+]/g, ""), email = f(form, "email");
+  if (name.length < 2) earnBack("refer", "Enter the student's name.", false);
+  if (phone.replace(/\D/g, "").length < 10) earnBack("refer", "Enter a valid 10-digit mobile number.", false);
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) earnBack("refer", "Enter a valid email address.", false);
+  const join = f(form, "join_date");
+  const s = await submitEarn("referral", "refer", `${name} · ${phone}${email ? ` · ${email}` : ""}`, { name, phone, email: email || null, college: f(form, "college") || null, join_date: join || null, info: f(form, "info").slice(0, 250) || null });
   // A referral also becomes a lead in the admissions pipeline.
-  if (kind === "referral") {
-    const phone = details.match(/\+?\d[\d\s-]{8,}\d/)?.[0]?.replace(/\D/g, "") ?? null;
-    await repo.createLead({ full_name: details.replace(/\+?\d[\d\s-]{8,}\d/, "").replace(/[,–-]+\s*$/, "").trim().slice(0, 80) || "Referral", phone, source: "Referral", referred_by_student: s.studentId, remarks: `Referred by student (portal): ${details}` });
-  }
-  revalidatePath("/portal/earn");
-  return { ok: true, message: "Submitted! The team will verify it and credit your reward." };
+  await getServiceRepo().createLead({ full_name: name.slice(0, 80), phone, email: email || null, source: "Referral", referred_by_student: s.studentId, remarks: `Referred by ${s.name} (portal)${f(form, "college") ? ` · ${f(form, "college")}` : ""}${join ? ` · expected joining ${join}` : ""}${f(form, "info") ? ` · ${f(form, "info").slice(0, 250)}` : ""}` });
+  earnBack("refer", "Referral submitted! You earn the reward after the admission and payment are verified.");
+}
+
+export async function submitFeedbackAction(kind: "feedback" | "review", form: FormData) {
+  const text = f(form, "text"), link = f(form, "proof_url");
+  if (kind === "feedback" && text.length < 10) earnBack("feedback", "Write at least a line of feedback (10+ characters).", false);
+  if (kind === "review" && !link) earnBack("feedback", "Paste the link to your Google review.", false);
+  await submitEarn(kind, "feedback", kind === "feedback" ? text : `Google review ${text ? `– ${text}` : ""}`.trim(), { text: text.slice(0, 1000) || null }, link || null);
+  earnBack("feedback", kind === "feedback" ? "Feedback submitted for verification." : "Google review submitted. Thank you!");
+}
+
+export async function submitSocialAction(form: FormData) {
+  const platform = f(form, "platform");
+  const n = (k: string) => Math.max(0, Math.floor(Number(f(form, k)) || 0));
+  const likes = n("likes"), shares = n("shares"), subscribes = n("subscribes");
+  const { SOCIAL_PLATFORMS } = await import("@/lib/types-rewards");
+  const p = SOCIAL_PLATFORMS.find((x) => x.key === platform);
+  if (!p) earnBack("social", "Pick a platform.", false);
+  if (likes + shares + subscribes === 0) earnBack("social", "Enter your likes, shares or subscribes.", false);
+  if (likes + shares + subscribes > 100000) earnBack("social", "That's more than one submission allows — split it into smaller ones.", false);
+  await submitEarn("social", "social", `${p!.label} – ${likes} likes, ${shares} shares, ${subscribes} subscribes`, { platform, likes, shares, subscribes }, f(form, "proof_url") || null);
+  earnBack("social", "Activity submitted for verification.");
+}
+
+export async function applyMentorshipAction(form: FormData) {
+  const domain = f(form, "domain"), start = f(form, "start"), end = f(form, "end");
+  if (!domain) earnBack("mentorship", "Pick a mentorship domain.", false);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) earnBack("mentorship", "Pick the start and end dates.", false);
+  const { addMonths } = await import("@/lib/format");
+  if (end < addMonths(start, 4)) earnBack("mentorship", "Mentorship must be for at least 4 months.", false);
+  if (form.get("agree_duration") !== "on" || form.get("agree_terms") !== "on") earnBack("mentorship", "Tick both agreements to apply.", false);
+  await submitEarn("mentor", "mentorship", `Mentorship – ${domain}, ${start} to ${end}`, { domain, start, end, agreed: true });
+  earnBack("mentorship", "Mentorship application submitted.");
+}
+
+export async function reportIncidentAction(form: FormData) {
+  const about = f(form, "about"), date = f(form, "date"), text = f(form, "description");
+  if (about.length < 2) earnBack("incident", "Enter who the incident is about.", false);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > new Date().toISOString().slice(0, 10)) earnBack("incident", "Pick the date of the incident (not in the future).", false);
+  if (text.length < 15) earnBack("incident", "Describe what happened (at least 15 characters).", false);
+  await submitEarn("incident", "incident", `Incident about ${about} on ${date}`, { about, number: f(form, "number") || null, date, description: text.slice(0, 500), confidential: form.get("confidential") === "on" });
+  earnBack("incident", "Report submitted confidentially to the office.");
 }
 
 // ---- terms & placement agreement --------------------------------------------------------------------

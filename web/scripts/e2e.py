@@ -13,6 +13,7 @@ import json
 import re
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from html.parser import HTMLParser
@@ -634,14 +635,14 @@ other = next(f for f in forms_of(html) if any(b["value"] == "no" for b in f["but
 submit(f"/placements?drive={drive}", ADMIN, other, button="No")
 _, _, html = get(f"/placements?drive={drive}", ADMIN)
 check("staff can record a No answer", re.search(r'aria-pressed="true"[^>]*value="no"|value="no"[^>]*aria-pressed="true"', html) is not None)
-for kind, expect in [("referral", "₹2,000"), ("mentor", "₹1,000"), ("social", "₹100")]:
+for kind, expect in [("referral", "₹2,000")]:
     _, _, html = get("/ambassadors?show=all", ADMIN)
     f = find_form(html, must=["student_id", "kind", "details"])
     submit("/ambassadors?show=all", ADMIN, f, {"kind": kind, "details": f"E2E amb {kind}", "reward_amount": ""})
     _, _, html = get("/ambassadors?show=all", ADMIN)
     row = re.search(r"E2E amb " + kind + r"[\s\S]{0,300}?(₹[\d,]+)", html)
     check(f"ambassador {kind}: blank reward uses standard {expect}", row and row[1] == expect, row and row[1])
-check("ambassador counters include all activity types", re.search(r"referrals · \d+ reviews · \d+ likes/shares · \d+ mentees", text(get("/ambassadors", ADMIN)[2])) is not None)
+check("ambassador counters include all activity types", re.search(r"\d+ referral · \d+ institute feedback · \d+ google review · \d+ like / share / subscribe · \d+ mentorship · \d+ incident report", text(get("/ambassadors", ADMIN)[2])) is not None)
 s, final, html = get(f"/students/{new_id}/report", ADMIN)
 t = text(html)
 check("per-student report renders", s == 200 and "Student Report" in t and "E2E Student" in t and "Attendance (last 90 days)" in t and "Fees" in t, f"status {s}")
@@ -868,6 +869,82 @@ check("join is recorded for the placement team", "Open WhatsApp Placement Group"
 s, h, _ = http("GET", "/portal/agreement/join", "")
 loc = h.get("Location") or h.get("location")
 check("join link needs a signed-in student", GROUP not in (loc or ""), f"status {s} loc {loc}")
+
+# 29. Earn & Rewards: referral, feedback → goodie, social target → goodie, mentorship, incident, admin controls
+s, final, html = get("/portal/earn", STU)
+check("earn & rewards page opens", s == 200 and all(k in text(html) for k in ["This Month Earned", "Refer a Student", "Feedback / Review Submission", "Social Media Activity", "Mentorship Application", "Report an Incident", "Activity Targets"]))
+for p in ["/portal/earn/activities", "/portal/earn/history", "/portal/earn/ambassador"]:
+    s, final, _ = get(p, STU)
+    check(f"student page {p}", s == 200 and final == p)
+s, final, _ = get("/ambassadors", STU)
+check("students can't open the admin control panel", final != "/ambassadors")
+f = find_form(html, must=["name", "phone", "college"])
+s, loc, _ = submit("/portal/earn", STU, f, {"name": "E2E Referred Friend", "phone": "9876500011", "email": "friend@example.com", "info": "B.E ECE 2026"})
+check("referral submitted", "saved=" in (loc or ""), loc)
+check("referral becomes a lead", "E2E Referred Friend" in get("/leads", ADMIN)[2])
+for i in range(4):
+    _, _, html = get("/portal/earn", STU)
+    s, loc, _ = submit("/portal/earn", STU, find_form(html, button="Submit feedback"), {"text": f"E2E feedback number {i + 1} – labs are good"})
+check("4 feedbacks submitted", "saved=" in (loc or ""), loc)
+def verify_all(marker):
+    for _ in range(10):
+        _, _, h = get("/ambassadors?show=pending", ADMIN)
+        if marker not in h:
+            return
+        i = h.index(marker)
+        fm = next((x for x in forms_of(h) if x["start"] > i and any(b["text"].strip() in ("Verify", "Approve") for b in x["buttons"])), None)
+        if not fm:
+            return
+        submit("/ambassadors", ADMIN, fm, button=fm["buttons"][0]["text"].strip())
+verify_all("E2E feedback number")
+_, _, html = get("/portal/earn", STU)
+check("4 verified feedbacks = eligible for goodie", "Eligible for Goodie!" in html and re.search(r"\(\s*4\s*/\s*4\s*verified\)", text(html)) is not None)
+check("goodie shows in rewards history", "4 verified feedbacks" in get("/portal/earn/history", STU)[2])
+f = find_form(html, must=["platform", "likes", "shares", "subscribes"])
+submit("/portal/earn", STU, f, {"platform": "youtube", "likes": "6000", "shares": "3000", "subscribes": "1000", "proof_url": "https://example.com/e2e-proof"})
+verify_all("YouTube – 6000 likes")
+_, _, html = get("/portal/earn", STU)
+check("10,000 social activities reach the target", re.search(r"10,000\s*/\s*10,000\s*\(\s*100\s*%\)", text(html)) is not None and "Target Achieved" in html)
+MENTEE = "mvl_demo=student:s-005"  # a student without a mentorship application yet
+_, _, mhtml = get("/portal/earn", MENTEE)
+f = find_form(mhtml, must=["domain", "start", "end"])
+s, loc, _ = submit("/portal/earn", MENTEE, f, {"domain": "UVM", "start": str(TODAY), "end": str(TODAY + dt.timedelta(days=60)), "agree_duration": "on", "agree_terms": "on"})
+check("mentorship shorter than 4 months is refused", "error=" in (loc or "") and "4" in urllib.parse.unquote(loc or ""), loc)
+s, loc, _ = submit("/portal/earn", MENTEE, f, {"domain": "UVM", "start": str(TODAY), "end": str(TODAY + dt.timedelta(days=130)), "agree_duration": "on", "agree_terms": "on"})
+check("mentorship application submitted", "saved=" in (loc or ""), loc)
+f = find_form(html, must=["about", "description"])
+s, loc, _ = submit("/portal/earn", STU, f, {"about": "E2E Someone", "date": str(TODAY), "description": "E2E incident: misuse of lab system during class hours."})
+check("incident report submitted", "saved=" in (loc or ""), loc)
+_, _, html = get("/ambassadors?show=all", ADMIN)
+check("office sees the confidential incident", "Confidential" in html and "E2E Someone" in html)
+# admin: pause institute feedback → students can't submit
+_, _, html = get("/ambassadors", ADMIN)
+f = find_form(html, must=["target.institute_feedback", "type.referral"])
+vals = {n: "on" for n, v, t in f["fields"] if t == "checkbox" and n.startswith("active.")}
+vals["paused.institute_feedback"] = "on"
+s, loc, _ = submit("/ambassadors", ADMIN, f, vals)
+check("admin saves reward settings", "saved=" in (loc or ""), loc)
+_, _, html = get("/portal/earn", STU)
+check("paused activity shows as paused to students", "Paused by the office" in html)
+s, loc, _ = submit("/portal/earn", STU, find_form(html, button="Submit feedback"), {"text": "E2E feedback while paused – should fail"})
+check("paused activity refuses new submissions", "error=" in (loc or ""), loc)
+f = find_form(get("/ambassadors", ADMIN)[2], must=["target.institute_feedback", "type.referral"])
+vals = {n: "on" for n, v, t in f["fields"] if t == "checkbox" and n.startswith("active.")}
+submit("/ambassadors", ADMIN, f, vals)
+f = find_form(get("/ambassadors", ADMIN)[2], must=["academic_year", "valid_from"])
+s, loc, _ = submit("/ambassadors", ADMIN, f, {"academic_year": "2026 / 2027", "valid_from": "2026-06-01", "valid_to": "2027-05-31"})
+check("admin saves program controls", "saved=" in (loc or ""), loc)
+for t_ in ["activities", "students", "claims"]:
+    s, h, raw = http("GET", f"/api/export/rewards?type={t_}", ADMIN)
+    check(f"rewards report {t_} downloads", s == 200 and "text/csv" in (h.get("content-type") or h.get("Content-Type") or ""), f"status {s}")
+s, _, _ = http("GET", "/api/export/rewards?type=activities", STU)
+check("students can't download reward reports", s == 403)
+_, _, html = get("/ambassadors", ADMIN)
+before = text(get("/portal/earn", STU)[2])
+i = html.index("Reward claims")
+fm = next(x for x in forms_of(html) if x["start"] > i and any("Mark collected" in b["text"] for b in x["buttons"]))
+s, loc, _ = submit("/ambassadors", ADMIN, fm, button="Mark collected")
+check("goodie marked collected", "saved=" in (loc or ""), loc)
 
 passed = sum(1 for r in results if r[1])
 print(f"\n{passed}/{len(results)} checks passed")
