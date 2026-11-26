@@ -133,15 +133,6 @@ export async function acceptTermsAction(kind: "general" | "placement", form: For
   revalidatePath("/portal", "layout");
 }
 
-export async function requestPlacementGroupAction() {
-  const s = await requireStudent();
-  const repo = getServiceRepo();
-  const { required } = await repo.consentFor(s.studentId, "placement");
-  if (required) throw new Error("Accept the placement terms first.");
-  await repo.updateStudent(s.studentId, { placement_group: "requested" });
-  revalidatePath("/portal", "layout");
-}
-
 // ---- assignments: student submits a link ------------------------------------------------------
 export async function submitAssignmentAction(assignmentId: string, form: FormData) {
   const s = await requireStudent();

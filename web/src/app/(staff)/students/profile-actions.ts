@@ -92,6 +92,35 @@ export async function verifyProfileAction(studentId: string) {
   revalidatePath(`/students/${studentId}`);
 }
 
+/** Inline "Master Data" edit on the profile: branch, course, batch, training mode and validity. */
+export async function saveMasterDataAction(id: string, form: FormData) {
+  await requireStaff();
+  const [cur] = await (await getStore()).select<Student>("students", { eq: { id } });
+  if (!cur) throw new Error("Student not found");
+  const g = (k: string) => String(form.get(k) ?? "").trim();
+  const mode = g("training_mode");
+  const months = Number(g("validity_months")) || null;
+  const extra = { ...(cur.extra ?? {}) };
+  const patch: Partial<Student> = {
+    branch_id: g("branch_id") || null,
+    course_id: g("course_id") || cur.course_id,
+    batch_id: g("batch_id") || null,
+    training_mode: mode === "online" || mode === "offline" || mode === "hybrid" ? mode : cur.training_mode,
+  };
+  if (months && months !== extra.validity_months) {
+    extra.validity_months = months;
+    patch.extra = extra;
+    // Valid until = joining date + validity + any complementary months.
+    if (cur.admission_date) {
+      const { addMonths } = await import("@/lib/format");
+      patch.validity_end = addMonths(cur.admission_date, months + Number(extra.complementary_months ?? 0));
+    }
+  }
+  await (await getRepo()).updateStudent(id, patch);
+  revalidatePath(`/students/${id}`);
+  redirect(`/students/${id}?saved=master#overview`);
+}
+
 /** Remove a college or company from the master — only when no student is linked to it. */
 export async function removeOrgAction(kind: "college" | "client", id: string): Promise<{ ok: boolean; message: string }> {
   const me = await requireStaff();

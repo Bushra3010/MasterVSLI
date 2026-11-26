@@ -16,6 +16,20 @@ function back(form: FormData, extra = "") {
   return url + (extra ? (url.includes("?") ? "&" : "?") + extra : "");
 }
 
+/** "Student · Name (MVL…)" / "College · Name" / "Company · Name" from the Linked Record box → label + link. */
+async function linkedRecord(label: string): Promise<Pick<CalendarEvent, "linked_label" | "linked_href">> {
+  if (!label) return { linked_label: null, linked_href: null };
+  const m = label.match(/\(([A-Z]+\d+)\)\s*$/);
+  if (label.startsWith("Student · ") && m) {
+    const { getRepo } = await import("@/lib/server");
+    const st = (await (await getRepo()).students()).find((x) => x.enrollment_no === m[1]);
+    if (st) return { linked_label: label, linked_href: `/students/${st.id}` };
+  }
+  if (label.startsWith("College · ")) return { linked_label: label, linked_href: "/colleges" };
+  if (label.startsWith("Company · ")) return { linked_label: label, linked_href: "/hr-contacts" };
+  return { linked_label: label.slice(0, 200), linked_href: null };
+}
+
 export async function saveEventAction(form: FormData) {
   const me = await requireStaff();
   const title = t(form, "title");
@@ -36,12 +50,13 @@ export async function saveEventAction(form: FormData) {
     title,
     description: t(form, "description") || null,
     category: category in CALENDAR_CATEGORIES ? category : "other",
-    priority: ["low", "medium", "high"].includes(priority) ? priority : "medium",
+    priority: ["low", "medium", "high", "urgent"].includes(priority) ? priority : "medium",
     start_at: istToUtc(date, allDay ? null : start),
     end_at: !allDay && end ? istToUtc(date, end) : null,
     all_day: allDay,
     assignee_id: t(form, "assignee_id") || null,
     location: t(form, "location") || null,
+    ...(await linkedRecord(t(form, "linked"))),
     reminders,
     channels: channels.length ? channels : ["dashboard"],
   };

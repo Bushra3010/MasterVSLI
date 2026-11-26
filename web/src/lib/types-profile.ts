@@ -8,6 +8,8 @@ export interface StudentExtra {
   current_same?: boolean;
   current_address?: Address;
   complementary_months?: number;
+  /** Validity chosen from the admin list (months); falls back to the course validity. */
+  validity_months?: number;
   validity_type?: "fixed" | "extendable";
   company_designation?: string;
   /** Professional details before joining MasterVLSI (alongside students.professional). */

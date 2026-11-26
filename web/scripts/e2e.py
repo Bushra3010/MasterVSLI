@@ -2,7 +2,7 @@
 """
 End-to-end test of every ERP module, run against a local server in DEMO mode:
 
-  NEXT_PUBLIC_SUPABASE_URL= NEXT_PUBLIC_SUPABASE_ANON_KEY= CRON_SECRET=e2e-secret npx next dev -p 3100
+  NEXT_PUBLIC_SUPABASE_URL= NEXT_PUBLIC_SUPABASE_ANON_KEY= CRON_SECRET=e2e-secret PLACEMENT_WHATSAPP_GROUP_URL=https://chat.whatsapp.com/E2ETESTGROUP npx next dev -p 3100
   python3 scripts/e2e.py http://localhost:3100
 
 Forms are submitted exactly as a browser without JavaScript would (Next.js server actions support
@@ -716,10 +716,10 @@ check("office sees the student's update and it needs verification", "E2E Father 
 
 # 26. staff calendar & reminders
 s, final, html = get("/calendar", ADMIN)
-check("calendar month view opens", s == 200 and final == "/calendar" and "Batch review meeting" in html and "Pending reminders" in html)
+check("calendar month view opens", s == 200 and final == "/calendar" and "HR meeting" in html and "Pending Reminders" in html and "Create Reminder" in html and "Upcoming Activities" in html)
 for v in ["week", "day"]:
     s, _, html = get(f"/calendar?view={v}", ADMIN)
-    check(f"calendar {v} view opens", s == 200 and "Calendar &amp; reminders" in html)
+    check(f"calendar {v} view opens", s == 200 and "Staff Calendar &amp; Reminders" in html)
 _, _, html = get(f"/calendar?new={TODAY}", ADMIN)
 f = find_form(html, must=["title", "date", "start_time"])
 check("event form offers categories, priority, assignee and reminders", {"category", "priority", "assignee_id", "reminders", "channels"} <= set(f["names"]))
@@ -727,9 +727,15 @@ s, loc, body = submit("/calendar", ADMIN, f, {"title": "E2E calendar meeting", "
 ev = (re.search(r"event=([\w-]+)", loc or "") or [None, None])[1]
 check("event added", s in (302, 303, 307) and "saved=added" in (loc or "") and ev, f"status {s} loc {loc} {text(body)[:200]}")
 _, _, html = get(loc, ADMIN)
-check("new event shows on the calendar with its details", "Event added" in html and "E2E calendar meeting" in html and "Sowmya Rao" in html and "16:00" in html)
+check("new event shows on the calendar with its details", "Reminder saved" in html and "E2E calendar meeting" in html and "Sowmya Rao" in html and "16:00" in html)
 _, _, html = get(f"/calendar?view=week&date={TODAY}", ADMIN)
 check("new event shows in week view", "E2E calendar meeting" in html)
+_, _, html = get(f"/calendar?new={TODAY}", ADMIN)
+f = find_form(html, must=["title", "date", "linked"])
+s, loc, _ = submit("/calendar", ADMIN, f, {"title": "E2E urgent follow-up", "date": str(TODAY), "start_time": "18:00", "category": "admission", "priority": "urgent", "assignee_id": "st-1", "linked": "Student · Adarsh Hullur (MVL2026002)"})
+_, _, html = get(f"/calendar?date={TODAY}", ADMIN)
+row = next((r for r in re.findall(r"<tr[\s\S]*?</tr>", html) if "E2E urgent follow-up" in r), "")
+check("reminder keeps urgent priority and linked student", "Urgent" in row and "Adarsh Hullur" in row and "Admission" in row, row[:200])
 _, _, html = get(f"/calendar?event={ev}&date={TODAY}", ADMIN)
 f = find_form(html, must=["id", "title"])
 s, loc, _ = submit("/calendar", ADMIN, f, {"title": "E2E calendar meeting (moved)", "start_time": "17:30", "end_time": ""})
@@ -738,15 +744,15 @@ check("event edited", "saved=updated" in (loc or "") and "E2E calendar meeting (
 _, _, html = get(f"/calendar?who=st-2&date={TODAY}", ADMIN)
 check("assignee filter keeps the event", "E2E calendar meeting (moved)" in html)
 _, _, html = get(f"/calendar?who=st-3&date={TODAY}&view=day", ADMIN)
-check("assignee filter hides other people's events", "E2E calendar meeting (moved)" not in html.split("Pending reminders")[0])
+check("assignee filter hides other people's events", "E2E calendar meeting (moved)" not in html.split("Pending Reminders")[0])
 _, _, html = get(f"/calendar?new={TODAY}", ADMIN)
 f = find_form(html, must=["title", "date"])
 s, loc, body = submit("/calendar", ADMIN, f, {"title": "Bad year", "date": "0006-02-20"})
 check("event with an impossible year is refused", "saved=added" not in (loc or ""), f"status {s}")
 _, _, html = get(f"/calendar?event={ev}&date={TODAY}", ADMIN)
-submit("/calendar", ADMIN, find_form(html, button="Mark done"), button="Mark done")
+submit("/calendar", ADMIN, find_form(html, button="Mark as done"), button="Mark as done")
 _, _, html = get("/calendar", ADMIN)
-done_part = text(html).split("Recently completed")[1]
+done_part = text(html).split("Recently Completed")[1]
 check("marked done moves to recently completed", "E2E calendar meeting (moved)" in done_part)
 _, _, html = get("/dashboard", ADMIN)
 check("dashboard shows pending reminders and links to the calendar", "Pending Reminders" in html and 'href="/calendar"' in html)
@@ -843,6 +849,25 @@ s, loc, _ = submit("/incentives/admin", ADMIN, f, button="Mark paid")
 _, _, html = get(loc, ADMIN)
 row = next((r for r in re.findall(r"<tr[\s\S]*?</tr>", html) if who and who in r and "Settled" in r), None)
 check("payout marked paid", "Marked as paid" in html and row is not None, who)
+
+# 28. placement WhatsApp group: link only after accepting the placement terms
+GROUP = "https://chat.whatsapp.com/E2ETESTGROUP"  # the test server runs with PLACEMENT_WHATSAPP_GROUP_URL set to this
+_, _, html = get("/portal/agreement", STU)
+check("group link is never printed in the page", GROUP not in html)
+if "Agree &amp; Activate Placement Profile" in html or "Agree & Activate Placement Profile" in html:
+    f = find_form(html, button="Agree")
+    vals = {n: "on" for n, _, t in f["fields"] if t == "checkbox"}
+    submit("/portal/agreement", STU, f, vals, button="Agree")
+    _, _, html = get("/portal/agreement", STU)
+check("join button shown after accepting the terms", 'href="/portal/agreement/join"' in html)
+s, h, _ = http("GET", "/portal/agreement/join", STU)
+loc = h.get("Location") or h.get("location")
+check("join button opens the MasterVLSI WhatsApp group", s in (302, 303, 307) and (loc or "").startswith(GROUP), f"status {s} loc {loc}")
+_, _, html = get("/portal/agreement", STU)
+check("join is recorded for the placement team", "Open WhatsApp Placement Group" in html)
+s, h, _ = http("GET", "/portal/agreement/join", "")
+loc = h.get("Location") or h.get("location")
+check("join link needs a signed-in student", GROUP not in (loc or ""), f"status {s} loc {loc}")
 
 passed = sum(1 for r in results if r[1])
 print(f"\n{passed}/{len(results)} checks passed")
