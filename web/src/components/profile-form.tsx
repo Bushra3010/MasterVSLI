@@ -4,7 +4,7 @@ import { useActionState, useMemo, useState, type ReactNode } from "react";
 import { MasterSelect } from "@/components/master-select";
 import { addMonths } from "@/lib/format";
 import type { Batch, Branch, Client, College, Course, Education, MasterCategory, Student, TpoContact } from "@/lib/types";
-import { EDU_ALIASES, EDU_ROWS, INDIAN_STATES } from "@/lib/types-profile";
+import { careerGapRows, employmentRows, EDU_ALIASES, EDU_ROWS, formatExperience, INDIAN_STATES, monthsBetween, totalExperienceMonths, type CareerGapRow, type EmploymentRow } from "@/lib/types-profile";
 
 type Result = { ok: boolean; message: string } | null;
 
@@ -43,6 +43,71 @@ const C = ({ label, name, checked, onChange }: { label: string; name: string; ch
 const Grid = ({ children, cols = 2 }: { children: ReactNode; cols?: 2 | 3 | 4 }) => (
   <div className={`grid gap-3 ${cols === 4 ? "sm:grid-cols-2 lg:grid-cols-4" : cols === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>{children}</div>
 );
+
+
+const HEAD = "px-2 py-1.5 text-left text-[11px] font-semibold text-muted uppercase";
+const CELL = "w-full rounded-[4px] border border-line px-2 py-1.5 text-[13px] focus:border-brand focus:outline-none";
+
+/** §1 Employment history. Duration is shown, never typed. */
+function EmploymentGrid({ rows, onChange }: { rows: EmploymentRow[]; onChange: (r: EmploymentRow[]) => void }) {
+  const set = (i: number, k: keyof EmploymentRow, v: string) =>
+    onChange(rows.map((r, n) => (n === i ? { ...r, [k]: v } : r)));
+  return (
+    <div className="mb-4 overflow-x-auto">
+      <table className="w-full min-w-[46rem] border-collapse">
+        <thead className="bg-slate-50">
+          <tr>{["Company", "Designation", "Start", "End", "CTC", "Location", "Experience", ""].map((h) => <th key={h} className={HEAD}>{h}</th>)}</tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className="border-t border-line">
+              <td className="p-1"><input name={`emp.${i}.company`} value={r.company ?? ""} onChange={(e) => set(i, "company", e.target.value)} placeholder="Company" aria-label={`Company ${i + 1}`} className={CELL} /></td>
+              <td className="p-1"><input name={`emp.${i}.designation`} value={r.designation ?? ""} onChange={(e) => set(i, "designation", e.target.value)} placeholder="Designation" aria-label={`Designation ${i + 1}`} className={CELL} /></td>
+              <td className="p-1"><input name={`emp.${i}.from`} type="month" value={r.from ?? ""} onChange={(e) => set(i, "from", e.target.value)} aria-label={`Start ${i + 1}`} className={CELL} /></td>
+              <td className="p-1"><input name={`emp.${i}.to`} type="month" value={r.to ?? ""} onChange={(e) => set(i, "to", e.target.value)} aria-label={`End ${i + 1}`} className={CELL} /></td>
+              <td className="p-1"><input name={`emp.${i}.ctc`} value={r.ctc ?? ""} onChange={(e) => set(i, "ctc", e.target.value)} placeholder="12 LPA" aria-label={`CTC ${i + 1}`} className={CELL} /></td>
+              <td className="p-1"><input name={`emp.${i}.location`} value={r.location ?? ""} onChange={(e) => set(i, "location", e.target.value)} placeholder="City" aria-label={`Location ${i + 1}`} className={CELL} /></td>
+              <td className="px-2 py-1 text-[12px] tabular-nums text-muted">{r.from ? formatExperience(monthsBetween(r.from, r.to)) : "—"}</td>
+              <td className="px-1 py-1">
+                <button type="button" onClick={() => onChange(rows.filter((_, n) => n !== i))} aria-label={`Remove row ${i + 1}`} className="text-xs text-red-700 hover:underline">− Remove</button>
+              </td>
+            </tr>
+          ))}
+          {!rows.length && <tr className="border-t border-line"><td colSpan={8} className="px-2 py-3 text-[13px] text-muted">No employment recorded. Add a row for each company.</td></tr>}
+        </tbody>
+      </table>
+      {rows.length < 8 && (
+        <button type="button" onClick={() => onChange([...rows, {}])} className="mt-2 text-xs font-medium text-navy underline">+ Add row</button>
+      )}
+    </div>
+  );
+}
+
+/** §1 Career gaps. */
+function GapGrid({ rows, onChange }: { rows: CareerGapRow[]; onChange: (r: CareerGapRow[]) => void }) {
+  const set = (i: number, k: keyof CareerGapRow, v: string) =>
+    onChange(rows.map((r, n) => (n === i ? { ...r, [k]: v } : r)));
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[32rem] border-collapse">
+        <thead className="bg-slate-50"><tr>{["From", "To", "Reason", "Duration", ""].map((h) => <th key={h} className={HEAD}>{h}</th>)}</tr></thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className="border-t border-line">
+              <td className="p-1 w-36"><input name={`gap.${i}.from`} type="month" value={r.from ?? ""} onChange={(e) => set(i, "from", e.target.value)} aria-label={`Gap from ${i + 1}`} className={CELL} /></td>
+              <td className="p-1 w-36"><input name={`gap.${i}.to`} type="month" value={r.to ?? ""} onChange={(e) => set(i, "to", e.target.value)} aria-label={`Gap to ${i + 1}`} className={CELL} /></td>
+              <td className="p-1"><input name={`gap.${i}.reason`} value={r.reason ?? ""} onChange={(e) => set(i, "reason", e.target.value)} placeholder="Reason" aria-label={`Gap reason ${i + 1}`} className={CELL} /></td>
+              <td className="px-2 py-1 text-[12px] tabular-nums text-muted">{r.from ? formatExperience(monthsBetween(r.from, r.to)) : "—"}</td>
+              <td className="px-1 py-1"><button type="button" onClick={() => onChange(rows.filter((_, n) => n !== i))} aria-label={`Remove gap ${i + 1}`} className="text-xs text-red-700 hover:underline">− Remove</button></td>
+            </tr>
+          ))}
+          {!rows.length && <tr className="border-t border-line"><td colSpan={5} className="px-2 py-3 text-[13px] text-muted">No career gaps.</td></tr>}
+        </tbody>
+      </table>
+      {rows.length < 5 && <button type="button" onClick={() => onChange([...rows, {}])} className="mt-2 text-xs font-medium text-navy underline">+ Add row</button>}
+    </div>
+  );
+}
 
 export function ProfileForm({
   mode,
@@ -95,6 +160,9 @@ export function ProfileForm({
   const edu = (key: string) => education.find((e) => e.level === key || EDU_ALIASES[e.level] === key);
   const courseBatches = useMemo(() => batches.filter((b) => !courseId || b.course_id === courseId), [batches, courseId]);
   const [rows, setRows] = useState(Math.max(3, contacts.length));
+  // Older records held a single employment entry and a single gap; both read as one-row grids.
+  const [empRows, setEmpRows] = useState<EmploymentRow[]>(() => employmentRows(x, pr.company));
+  const [gapRows, setGapRows] = useState<CareerGapRow[]>(() => careerGapRows(x));
   const states = INDIAN_STATES as readonly string[];
 
   return (
@@ -310,17 +378,17 @@ export function ProfileForm({
         </Section>
       )}
 
-      <Section id="professional" title="Professional information">
-        <div className="mb-2 text-xs font-semibold text-muted uppercase">(A) Before joining MasterVLSI</div>
+      <Section id="professional" title="Professional information" note="Experience is calculated from the employment dates">
+        <div className="mb-2 text-xs font-semibold text-muted uppercase">(A) Before joining MasterVLSI — employment history</div>
+        <input type="hidden" name="emp.present" value="1" />
+        <EmploymentGrid rows={empRows} onChange={setEmpRows} />
         <Grid cols={4}>
           <S label="Working status" name="pro.working_status" value={pr.working_status} options={["Fresher", "Working", "Not working"]} />
-          <F label="Company" name="pro.company" value={pr.company} />
-          <F label="Designation" name="before.designation" value={x.before?.designation} />
-          <F label="Total experience" name="pro.total_exp" value={pr.total_exp} placeholder="1.5 years" />
-          <F label="Relevant experience" name="pro.relevant_exp" value={pr.relevant_exp} />
-          <F label="From" name="before.from" type="month" value={x.before?.from} />
-          <F label="To" name="before.to" type="month" value={x.before?.to} />
-          <F label="Job location" name="before.location" value={x.before?.location} />
+          <div>
+            <label className="label">Total experience</label>
+            <div className="input bg-slate-50 tabular-nums">{formatExperience(totalExperienceMonths(empRows))}</div>
+          </div>
+          <F label="Relevant experience" name="pro.relevant_exp" value={pr.relevant_exp} placeholder="in the target domain" />
           <F label="Current CTC" name="pro.current_ctc" value={pr.current_ctc} />
           <F label="Expected CTC" name="pro.expected_ctc" value={pr.expected_ctc} />
           <F label="Notice period" name="pro.notice_period" value={pr.notice_period} />
@@ -329,12 +397,8 @@ export function ProfileForm({
         </Grid>
         <div className="mt-3"><C label="Willing to relocate" name="pro.relocate" checked={pr.relocate} /></div>
         <div className="mt-4 border-t border-line pt-3">
-          <div className="mb-2 text-xs font-semibold text-muted uppercase">Career gap &amp; objective</div>
-          <Grid cols={4}>
-            <F label="Gap from" name="gap.from" type="month" value={x.career_gap?.from} />
-            <F label="Gap to" name="gap.to" type="month" value={x.career_gap?.to} />
-            <F label="Reason for gap" name="gap.reason" value={x.career_gap?.reason} wide />
-          </Grid>
+          <div className="mb-2 text-xs font-semibold text-muted uppercase">Career gaps</div>
+          <GapGrid rows={gapRows} onChange={setGapRows} />
           <div className="mt-3">
             <label className="label" htmlFor="career_objective">Career objective</label>
             <textarea id="career_objective" name="career_objective" rows={2} defaultValue={x.career_objective ?? ""} placeholder="e.g. Become a Design Verification engineer at a product semiconductor company" className="input" />

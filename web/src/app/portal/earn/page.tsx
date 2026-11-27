@@ -48,6 +48,12 @@ export default async function EarnPage({ searchParams }: { searchParams: Promise
     service.students(),
   ]);
   const sum = rewardsSummary(rows, goodies, settings, todayISO().slice(0, 7));
+  // §3 One workspace: totals computed from approved transactions, never entered.
+  const amount = (r: AmbassadorActivity) => Number(r.reward_amount) || 0;
+  const earned = rows.filter((r) => VERIFIED.includes(r.status)).reduce((a, r) => a + amount(r), 0);
+  const paidOut = rows.filter((r) => r.status === "credited" || r.status === "delivered").reduce((a, r) => a + amount(r), 0);
+  const ledger = [...rows].sort((a, b) => (b.decided_at ?? b.created_at).localeCompare(a.decided_at ?? a.created_at));
+  const KIND: Record<string, string> = { referral: "Referral", review: "Google review", social: "Social media", mentor: "Mentoring", feedback: "Institute feedback", incident: "Incident report" };
   const set = (k: RewardSetting["key"]) => settings.find((x) => x.key === k)!;
   const open = (k: RewardSetting["key"]) => set(k).active && !set(k).paused;
   const batchmates = profile?.student.batch_id ? students.filter((x) => x.batch_id === profile.student.batch_id && x.id !== s.studentId) : [];
@@ -93,6 +99,42 @@ export default async function EarnPage({ searchParams }: { searchParams: Promise
           </div>
         </div>
       </div>
+
+      {/* §3 Earnings & Rewards — single workspace */}
+      <section className={`mb-4 ${card}`}>
+        <Head icon={<Coins />} title="Earnings & Rewards" right={<span className="text-[12px] text-muted">Totals are calculated from approved transactions</span>} />
+        <div className="grid grid-cols-2 gap-3 border-b border-[#eef1f6] p-3 sm:grid-cols-4">
+          {[
+            ["Lifetime earned", inr(earned)],
+            ["Available", inr(Math.max(0, earned - paidOut))],
+            ["Paid", inr(paidOut)],
+            ["Hampers", String(goodies.length)],
+          ].map(([l, v]) => (
+            <div key={l} className="rounded-[6px] border border-line bg-white px-3 py-2">
+              <div className="text-[11px] text-muted">{l}</div>
+              <div className="text-xl font-bold tabular-nums text-[#1f2a44]">{v}</div>
+            </div>
+          ))}
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead className="bg-slate-50"><tr>{["Date", "Activity", "Details", "Reward", "Status"].map((h) => <th key={h} className="px-3 py-1.5 text-left text-[11px] font-semibold text-muted uppercase">{h}</th>)}</tr></thead>
+            <tbody>
+              {ledger.slice(0, 25).map((r) => (
+                <tr key={r.id} className="border-t border-line">
+                  <td className="px-3 py-1.5 whitespace-nowrap">{fmtDate(r.decided_at ?? r.created_at)}</td>
+                  <td className="px-3 py-1.5">{KIND[r.kind] ?? r.kind}</td>
+                  <td className="px-3 py-1.5 text-muted">{r.details}</td>
+                  <td className="px-3 py-1.5 font-semibold text-orange-600">{amount(r) ? inr(amount(r)) : r.gift ? r.gift : "—"}</td>
+                  <td className="px-3 py-1.5">{statusPill(r)}</td>
+                </tr>
+              ))}
+              {!ledger.length && <tr className="border-t border-line"><td colSpan={5} className="px-3 py-3 text-muted">Nothing earned yet — complete an activity below.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        {ledger.length > 25 && <p className="border-t border-line px-3 py-2 text-[11px] text-muted">Showing the 25 most recent of {ledger.length}. <Link href="/portal/earn/history" className="text-brand underline">Full history</Link>.</p>}
+      </section>
 
       <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="min-w-0 space-y-4">

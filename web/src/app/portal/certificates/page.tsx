@@ -15,42 +15,56 @@ export default async function PortalCertificates() {
   const apps = d.requests.filter((r) => r.kind === "certificate" || r.kind === "document");
   const issued = d.p.letters.filter((l) => !l.revoked);
 
+  // §2 One lifecycle row per document: the application and whatever it became.
+  // An issued letter with no application still appears, so nothing is hidden.
+  const claimed = new Set<string>();
+  const lifecycle = apps.map((r) => {
+    const match = issued.find((l) => !claimed.has(l.id) && (templateMeta(l.template)?.title ?? "").toLowerCase() === r.subject.toLowerCase());
+    if (match) claimed.add(match.id);
+    return {
+      key: r.id,
+      type: r.subject,
+      applied: r.created_at,
+      status: match ? "issued" : r.status,
+      tone: match ? ("green" as const) : REQUEST_TONE[r.status],
+      serial: match?.serial_no ?? null,
+      issued_at: match?.issued_at ?? null,
+      remarks: r.response ?? null,
+    };
+  });
+  for (const l of issued.filter((x) => !claimed.has(x.id)))
+    lifecycle.push({
+      key: l.id, type: templateMeta(l.template)?.title ?? l.template, applied: l.issued_at,
+      status: "issued", tone: "green" as const, serial: l.serial_no, issued_at: l.issued_at, remarks: null,
+    });
+  lifecycle.sort((a, b) => (b.applied ?? "").localeCompare(a.applied ?? ""));
+
   return (
     <>
-      <PageHeader title="Certificates" subtitle="Apply for a certificate, follow the office approval, and download issued documents." actions={<Link href="/portal/requests?kind=certificate" className="btn-primary">Apply for a certificate</Link>} />
-      <div className="grid gap-5 lg:grid-cols-2">
-        <Card title={`Applications & office approvals (${apps.length})`} bodyClass="p-0 overflow-x-auto">
-          <table className="table">
-            <thead><tr><th>Applied</th><th>Certificate</th><th>Office approval</th></tr></thead>
-            <tbody>
-              {apps.map((r) => (
-                <tr key={r.id}>
-                  <td className="whitespace-nowrap">{fmtDate(r.created_at)}</td>
-                  <td className="font-medium">{r.subject}</td>
-                  <td><Badge tone={REQUEST_TONE[r.status]}>{r.status.replace("_", " ")}</Badge>{r.response && <div className="text-[11px] text-muted">{r.response}</div>}</td>
-                </tr>
-              ))}
-              {!apps.length && <tr><td colSpan={3} className="text-center text-muted">No applications yet.</td></tr>}
-            </tbody>
-          </table>
-        </Card>
-        <Card title={`Issued documents (${issued.length})`} bodyClass="p-0 overflow-x-auto">
-          <table className="table">
-            <thead><tr><th>Document</th><th>Serial no.</th><th>Issued</th><th /></tr></thead>
-            <tbody>
-              {issued.map((l) => (
-                <tr key={l.id}>
-                  <td>{templateMeta(l.template)?.title}</td>
-                  <td className="font-mono text-xs">{l.serial_no}</td>
-                  <td>{fmtDate(l.issued_at)}</td>
-                  <td><Link href={`/portal/documents/${l.serial_no}`} className="text-navy underline">View / download</Link></td>
-                </tr>
-              ))}
-              {!issued.length && <tr><td colSpan={4} className="text-center text-muted">Nothing issued yet.</td></tr>}
-            </tbody>
-          </table>
-        </Card>
-      </div>
+      <PageHeader
+        title="Certificates"
+        subtitle="One row per document — application, office approval, certificate number and the issued file."
+        actions={<Link href="/portal/requests?kind=certificate" className="btn-primary">Apply for a certificate</Link>}
+      />
+      <Card title={`Document lifecycle (${lifecycle.length})`} bodyClass="p-0 overflow-x-auto">
+        <table className="table">
+          <thead><tr><th>Document type</th><th>Applied</th><th>Status</th><th>Certificate no.</th><th>Issued</th><th>Remarks</th><th /></tr></thead>
+          <tbody>
+            {lifecycle.map((r) => (
+              <tr key={r.key}>
+                <td className="font-medium">{r.type}</td>
+                <td className="whitespace-nowrap text-xs">{fmtDate(r.applied)}</td>
+                <td><Badge tone={r.tone}>{r.status.replace("_", " ")}</Badge></td>
+                <td className="font-mono text-xs">{r.serial ?? "—"}</td>
+                <td className="whitespace-nowrap text-xs">{r.issued_at ? fmtDate(r.issued_at) : "—"}</td>
+                <td className="text-xs text-muted">{r.remarks ?? "—"}</td>
+                <td>{r.serial ? <Link href={`/portal/documents/${r.serial}`} className="text-xs text-navy underline">Download</Link> : null}</td>
+              </tr>
+            ))}
+            {!lifecycle.length && <tr><td colSpan={7} className="text-center text-muted">Nothing applied for or issued yet.</td></tr>}
+          </tbody>
+        </table>
+      </Card>
     </>
   );
 }

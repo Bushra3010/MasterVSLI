@@ -1,7 +1,7 @@
 import "server-only";
 import type { Store } from "./store/types";
 import type { Education, MasterCategory, MasterOption, Student, StudentApplication, StudentExtra, StudentNote, TpoContact } from "./types";
-import { EDU_ROWS } from "./types-profile";
+import { EDU_ROWS, formatExperience, totalExperienceMonths, type CareerGapRow, type EmploymentRow } from "./types-profile";
 
 export type ProfileMode = "staff" | "student";
 
@@ -21,14 +21,42 @@ export function parseProfileForm(form: FormData, mode: ProfileMode, current: Stu
   const address = group("address", ["line", "city", "district", "state", "pincode"]);
   const currentSame = on("extra.current_same");
   const prev = current.extra ?? {};
+
+  // Repeatable grids: a row counts only once something is filled in, and a ticked
+  // Remove drops it. Experience is derived from these dates, never typed.
+  const rowsOf = <T,>(prefix: string, max: number, build: (i: number) => T, filled: (v: T) => boolean): T[] =>
+    Array.from({ length: max }, (_, i) => i)
+      .filter((i) => !on(`${prefix}.${i}.remove`))
+      .map(build)
+      .filter(filled);
+
+  const employment: EmploymentRow[] = rowsOf<EmploymentRow>("emp", 8, (i) => ({
+    company: g(`emp.${i}.company`) || undefined,
+    designation: g(`emp.${i}.designation`) || undefined,
+    from: g(`emp.${i}.from`) || undefined,
+    to: g(`emp.${i}.to`) || undefined,
+    ctc: g(`emp.${i}.ctc`) || undefined,
+    location: g(`emp.${i}.location`) || undefined,
+  }), (r) => Boolean(r.company || r.designation || r.from));
+
+  const career_gaps: CareerGapRow[] = rowsOf<CareerGapRow>("gap", 5, (i) => ({
+    from: g(`gap.${i}.from`) || undefined,
+    to: g(`gap.${i}.to`) || undefined,
+    reason: g(`gap.${i}.reason`) || undefined,
+  }), (r) => Boolean(r.from || r.reason));
+
   const extra: StudentExtra = {
     ...prev,
     phone_whatsapp: on("extra.phone_whatsapp"),
     alt_whatsapp: on("extra.alt_whatsapp"),
     current_same: currentSame,
     current_address: currentSame ? address : group("current", ["line", "city", "district", "state", "pincode"]),
-    before: { designation: g("before.designation") || undefined, from: g("before.from") || undefined, to: g("before.to") || undefined, location: g("before.location") || undefined },
+    ...(form.has("before.designation")
+      ? { before: { designation: g("before.designation") || undefined, from: g("before.from") || undefined, to: g("before.to") || undefined, location: g("before.location") || undefined } }
+      : {}),
+    ...(form.has("emp.present") ? { employment } : {}),
     ...(form.has("career_objective") ? { career_objective: g("career_objective")?.slice(0, 500) || undefined } : {}),
+    ...(form.has("emp.present") ? { career_gaps } : {}),
     ...(form.has("gap.from") ? { career_gap: group("gap", ["from", "to", "reason"]) } : {}),
     ...(form.has("ci.roll_no") ? { college_info: group("ci", ["roll_no", "department", "hod", "tpo", "faculty"]) } : {}),
     ...(form.has("co.employee_id") ? { corporate: { ...group("co", ["employee_id", "department", "hr_name", "hr_contact", "manager_name", "manager_contact"]), ...(mode === "staff" ? group("co", ["billing"]) : prev.corporate?.billing ? { billing: prev.corporate.billing } : {}) } } : {}),
@@ -62,6 +90,8 @@ export function parseProfileForm(form: FormData, mode: ProfileMode, current: Stu
     professional: {
       ...(current.professional ?? {}),
       ...group("pro", ["working_status", "company", "total_exp", "relevant_exp", "current_ctc", "expected_ctc", "notice_period", "preferred_location", "interview_mode"]),
+      // The grid is the source of truth for duration, so it wins over any posted value.
+      ...(form.has("emp.present") ? { total_exp: formatExperience(totalExperienceMonths(employment)) } : {}),
       relocate: on("pro.relocate"),
     },
     extra,
