@@ -28,6 +28,10 @@ export function parseProfileForm(form: FormData, mode: ProfileMode, current: Stu
     current_same: currentSame,
     current_address: currentSame ? address : group("current", ["line", "city", "district", "state", "pincode"]),
     before: { designation: g("before.designation") || undefined, from: g("before.from") || undefined, to: g("before.to") || undefined, location: g("before.location") || undefined },
+    ...(form.has("career_objective") ? { career_objective: g("career_objective")?.slice(0, 500) || undefined } : {}),
+    ...(form.has("gap.from") ? { career_gap: group("gap", ["from", "to", "reason"]) } : {}),
+    ...(form.has("ci.roll_no") ? { college_info: group("ci", ["roll_no", "department", "hod", "tpo", "faculty"]) } : {}),
+    ...(form.has("co.employee_id") ? { corporate: { ...group("co", ["employee_id", "department", "hr_name", "hr_contact", "manager_name", "manager_contact"]), ...(mode === "staff" ? group("co", ["billing"]) : prev.corporate?.billing ? { billing: prev.corporate.billing } : {}) } } : {}),
   };
   if (mode === "staff") {
     extra.admin_contact = g("extra.admin_contact") || undefined;
@@ -54,7 +58,7 @@ export function parseProfileForm(form: FormData, mode: ProfileMode, current: Stu
     address,
     family: group("family", ["father_name", "father_occupation", "father_phone", "mother_name", "mother_occupation", "mother_phone"]),
     emergency: group("emergency", ["name", "relation", "phone"]),
-    spouse: group("spouse", ["name", "occupation", "phone"]),
+    spouse: form.has("spouse.name") ? group("spouse", ["name", "occupation", "phone"]) : (current.spouse ?? {}),
     professional: {
       ...(current.professional ?? {}),
       ...group("pro", ["working_status", "company", "total_exp", "relevant_exp", "current_ctc", "expected_ctc", "notice_period", "preferred_location", "interview_mode"]),

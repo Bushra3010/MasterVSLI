@@ -3,7 +3,8 @@ import { Badge, Card, PageHeader, StatusBadge } from "@/components/ui";
 import { fmtDate } from "@/lib/format";
 import Link from "next/link";
 import { getServiceRepo, getStudentReadRepo } from "@/lib/server";
-import { requireStudent } from "@/lib/session";
+import { getServiceStore, requireStudent } from "@/lib/session";
+import { createStudent360Repo } from "@/lib/student360";
 import { respondAction } from "../actions";
 
 export const metadata = { title: "Placement drives" };
@@ -22,6 +23,8 @@ export default async function PortalDrives({ searchParams }: { searchParams: Pro
   const allowed = agreed && p?.student.status === "active" && p.access.find((a) => a.channel === "placement")?.enabled;
   const drives = allowed ? (await getServiceRepo().drives()).filter((d) => d.status !== "closed") : [];
   const mine = new Map(p?.responses.map((r) => [r.drive_id, r]) ?? []);
+  const resumes = allowed ? await createStudent360Repo(getServiceStore()).resumes(s.studentId) : [];
+  const def = resumes.find((r) => r.is_default)?.id ?? resumes[0]?.id;
 
   return (
     <>
@@ -39,15 +42,21 @@ export default async function PortalDrives({ searchParams }: { searchParams: Pro
           {drives.map((d) => {
             const r = mine.get(d.id);
             return (
-              <Card key={d.id} title={d.company} actions={<StatusBadge status={d.status} />}>
+              <div key={d.id} id={`drive-${d.id}`} className="scroll-mt-24">
+              <Card title={d.company} actions={<StatusBadge status={d.status} />}>
                 <div className="font-medium">{d.job_role}</div>
                 <div className="mt-1 text-sm text-muted">{[d.location, d.drive_date && fmtDate(d.drive_date), d.interview_mode].filter(Boolean).join(" · ")}</div>
                 <div className="mt-1 text-sm">CTC: {d.ctc ?? "—"}</div>
                 <div className="mt-1 text-xs text-muted">Eligibility: {d.eligibility ?? "—"}</div>
-                <div className="mt-4 flex items-center gap-2">
+                <div className="mt-4 flex flex-wrap items-center gap-2">
                   {d.status === "open" ? (
                     <>
-                      <form action={respondAction.bind(null, d.id, "yes")}>
+                      <form action={respondAction.bind(null, d.id, "yes")} className="flex flex-wrap items-center gap-2">
+                        {resumes.length > 0 && (
+                          <select name="resume_id" defaultValue={r?.resume_id ?? def} aria-label="Resume to send" className="input w-auto py-1 text-xs">
+                            {resumes.map((x) => <option key={x.id} value={x.id}>{x.title} ({x.version})</option>)}
+                          </select>
+                        )}
                         <button className={`btn ${r?.response === "yes" ? "bg-emerald-600 text-white" : "border border-emerald-300 text-emerald-700 hover:bg-emerald-50"}`}>Yes, interested</button>
                       </form>
                       <form action={respondAction.bind(null, d.id, "no")}>
@@ -61,9 +70,12 @@ export default async function PortalDrives({ searchParams }: { searchParams: Pro
                 {r?.response === "yes" && (
                   <div className="mt-3 text-xs text-muted">
                     Stage: <b>{r.stage ?? "Applied"}</b> · {r.synced_to_sheet ? "Shared with placement team" : "Waiting to sync"}
+                    {r.resume_id && <> · Resume: <b>{resumes.find((x) => x.id === r.resume_id)?.title ?? "—"}</b></>}
                   </div>
                 )}
+                {d.status === "open" && !resumes.length && <div className="mt-2 text-[11px] text-muted"><Link href="/portal/resumes" className="underline">Add a resume</Link> to choose which one is sent.</div>}
               </Card>
+              </div>
             );
           })}
           {!drives.length && <p className="text-sm text-muted">No drives right now.</p>}

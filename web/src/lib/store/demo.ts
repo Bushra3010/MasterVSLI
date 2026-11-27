@@ -5,10 +5,18 @@ import type { Query, Store, TableName } from "./types";
 
 type Row = Record<string, unknown>;
 
-const g = globalThis as unknown as { __mvlDemo?: DemoTables; __mvlSeq?: number };
+/** Bump whenever buildSeed() gains or drops a table, so a store cached by an older
+ *  module is rebuilt instead of serving `undefined` for the new tables. */
+const SEED_REVISION = 7;
 
+const g = globalThis as unknown as { __mvlDemo?: DemoTables; __mvlRev?: number; __mvlSeq?: number };
+
+/** The seed is cached on globalThis so demo edits survive hot reloads in dev. */
 function db(): DemoTables {
-  if (!g.__mvlDemo) g.__mvlDemo = buildSeed();
+  if (!g.__mvlDemo || g.__mvlRev !== SEED_REVISION) {
+    g.__mvlDemo = buildSeed();
+    g.__mvlRev = SEED_REVISION;
+  }
   return g.__mvlDemo;
 }
 const nextId = () => (g.__mvlSeq = (g.__mvlSeq ?? 100000) + 1);

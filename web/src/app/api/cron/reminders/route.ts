@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createCalendarRepo } from "@/lib/calendar";
+import { runDailyLeadReport } from "@/lib/leads";
 import { safeEqual } from "@/lib/integrations/crypto";
 import { getServiceRepo } from "@/lib/server";
 import { getServiceStore } from "@/lib/session";
@@ -15,7 +16,9 @@ async function run(req: Request) {
   if (!secret || !safeEqual(auth, `Bearer ${secret}`)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const staff = await getServiceRepo().staff();
   const result = await createCalendarRepo(getServiceStore()).sendDue(staff);
-  return NextResponse.json({ ok: true, ...result });
+  // Daily lead report for the super admin (8:30 PM India time unless changed in Lead Management).
+  const leads = await runDailyLeadReport(getServiceStore(), Date.now()).catch((e) => ({ report: "failed", error: String(e) }));
+  return NextResponse.json({ ok: true, ...result, leads });
 }
 
 export const GET = run;

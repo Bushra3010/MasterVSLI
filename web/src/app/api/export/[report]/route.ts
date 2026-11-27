@@ -47,6 +47,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ report: st
       ...entries.map((e) => [fmtDate(e.entry_date), e.kind, e.category, vn.get(e.vendor_id ?? ""), e.reference, e.note, e.kind === "income" ? e.amount : -Number(e.amount)]),
     ];
   } else if (report === "leads") {
+    // Controlled export: lead lists are for admins only.
+    if (s.role !== "super_admin" && s.role !== "admin") return new Response("Forbidden", { status: 403 });
     const leads = await repo.list<Lead>("leads", { order: { column: "created_at", ascending: false } });
     rows = [["Lead ID", "Name", "Phone", "Email", "City", "Source", "Course", "Stage", "Assigned to", "Next follow-up", "Added"], ...leads.map((l) => [l.lead_no, l.full_name, l.phone, l.email, l.city, l.source, l.course_code, l.stage, l.assigned_to, l.next_follow_up, l.created_at.slice(0, 10)])];
   } else if (report === "colleges") {

@@ -327,7 +327,8 @@ export function createRepo(db: Store) {
     async recordPayment(installment_id: string, amount: number, mode: string, reference?: string) {
       const [inst] = await db.select<Installment>("installments", { eq: { id: installment_id } });
       if (!inst) throw new Error("Installment not found");
-      await db.insert<Payment>("payments", [{ installment_id, student_id: inst.student_id, amount, mode, reference: reference || null, paid_at: new Date().toISOString() }]);
+      const [p] = await db.insert<Payment>("payments", [{ installment_id, student_id: inst.student_id, amount, mode, reference: reference || null, paid_at: new Date().toISOString() }]);
+      return p as Payment | undefined;
     },
 
     drives: () => db.select<Drive>("placement_drives", { order: { column: "drive_date" } }),

@@ -9,7 +9,7 @@ const TEMPLATES = {
   leads: "full_name,phone,email,city,source,course,remarks\nRohit Gupta,9876543210,rohit@example.com,Bengaluru,Website,DV,Interested in weekend batch",
   students: "full_name,phone,email,gender,course,mode,admission_date,fee,city,state,category\nNeha Rao,9876500000,neha@example.com,Female,DV,online,2026-11-20,30000,Hyderabad,Telangana,normal",
   colleges: "name,code,city,state,affiliation,type,status\nATME College of Engineering,CLG-ATME-001,Mysuru,Karnataka,VTU,Private,partner",
-  hr_contacts: "full_name,designation,company,phone,email,city,linkedin\nPriya Sharma,HR Manager,ABC Technologies,9876543210,priya@abc.example,Bengaluru,linkedin.com/in/priya",
+  hr_contacts: "full_name,designation,department,company,phone,email,personal_email,city,linkedin,joined_on,introduced_by,assigned_to\nPriya Sharma,HR Manager,Talent Acquisition,ABC Technologies,9876543210,priya@abc.example,priya.personal@example.com,Bengaluru,linkedin.com/in/priya,2026-02-01,Rakesh Kumar,Rakesh Kumar",
 };
 
 export default function ImportPage() {

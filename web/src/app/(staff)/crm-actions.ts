@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { z } from "zod";
 import { todayISO } from "@/lib/format";
 import { EDITABLE } from "@/lib/repo-crm";
@@ -29,22 +28,9 @@ export async function deleteRowAction(table: TableName, id: string) {
 
 // ---- leads -------------------------------------------------------------------------------
 export async function addLeadAction(form: FormData) {
-  const me = await requireStaff();
-  const l = z
-    .object({
-      full_name: z.string().trim().min(2),
-      phone: z.string().trim().optional(),
-      email: z.string().trim().email().optional().or(z.literal("")),
-      city: z.string().optional(),
-      source: z.string().min(1),
-      course_code: z.string().optional(),
-      assigned_to: z.string().optional(),
-      remarks: z.string().optional(),
-    })
-    .parse(Object.fromEntries(form));
-  const lead = await (await getRepo()).createLead({ ...l, email: l.email || null, assigned_to: l.assigned_to || me.name });
-  refresh();
-  redirect(`/leads?id=${lead.id}`);
+  // One place for lead creation (duplicate check, allocation and history).
+  const { addLeadAction: add } = await import("./leads/actions");
+  return add(form);
 }
 
 export async function moveLeadAction(id: string, stage: LeadStage) {
@@ -72,7 +58,7 @@ export async function updateLeadAction(id: string, form: FormData) {
   const pick = (k: string) => String(form.get(k) ?? "").trim() || null;
   const { getStore } = await import("@/lib/session");
   await (await getStore()).update("leads", { id }, {
-    phone: pick("phone"), email: pick("email"), city: pick("city"), course_code: pick("course_code"), assigned_to: pick("assigned_to"),
+    phone: pick("phone"), email: pick("email"), city: pick("city"), course_code: pick("course_code"),
     batch_pref: pick("batch_pref"), mode_pref: pick("mode_pref"), fee_plan: pick("fee_plan"), education: pick("education"), remarks: pick("remarks"),
   });
   refresh();
@@ -242,6 +228,10 @@ export async function importCsvAction(_: unknown, form: FormData): Promise<Impor
   const rows = parseCsv(await file.text());
   if (!rows.length) return { ok: false, message: "No rows found. The first line must be the column headings." };
   const repo = await getRepo();
+  const { createHrRepo } = await import("@/lib/hr");
+  const { getStore } = await import("@/lib/session");
+  const hrRepo = createHrRepo(await getStore());
+  const by = (await requireStaff()).name;
   const errors: string[] = [];
   let created = 0;
   const courses = await repo.courses();
@@ -253,7 +243,18 @@ export async function importCsvAction(_: unknown, form: FormData): Promise<Impor
       if (kind === "colleges") {
         await repo.save("colleges", { name, code: r.code, city: r.city, state: r.state, affiliation: r.affiliation, college_type: r.type || r.college_type, status: ["partner", "prospect", "inactive"].includes(r.status) ? r.status : "partner" });
       } else if (kind === "hr_contacts") {
-        await repo.save("hr_contacts", { full_name: name, designation: r.designation, department: r.department, phone: r.phone, email: r.email, linkedin: r.linkedin, city: r.city, current_company: r.company || r.current_company, company_type: r.company_type });
+        // Bulk import runs the same duplicate check and HR-code issuance as the
+        // registration form, so a spreadsheet cannot create a second record for
+        // someone already on file.
+        const res = await hrRepo.create({
+          full_name: name, designation: r.designation || null, department: r.department || null,
+          phone: r.phone || null, email: r.email || null, personal_email: r.personal_email || null,
+          linkedin: r.linkedin || null, city: r.city || null,
+          current_company: r.company || r.current_company || null, company_type: r.company_type || null,
+          joined_on: /^\d{4}-\d{2}-\d{2}$/.test(r.joined_on ?? "") ? r.joined_on : null,
+          source: r.source || "bulk_upload", introduced_by: r.introduced_by || null, assigned_to: r.assigned_to || null,
+        }, by, { allowDuplicate: false });
+        if (!res.ok) throw new Error(`already on file as ${res.duplicates[0].hr.hr_code ?? res.duplicates[0].hr.full_name} (matched on ${res.duplicates[0].on.join(", ")})`);
       } else if (kind === "leads") {
         await repo.createLead({ full_name: name, phone: r.phone || null, email: r.email || null, city: r.city || null, source: r.source || "Import", course_code: r.course || r.course_code || null, remarks: r.remarks || null });
       } else {

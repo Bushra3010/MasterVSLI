@@ -3,6 +3,10 @@ export * from "./types-profile";
 export * from "./types-calendar";
 export * from "./types-incentives";
 export * from "./types-rewards";
+export * from "./types-student360";
+export * from "./types-leads";
+export * from "./types-colleges";
+export * from "./types-hr";
 import type { Company, FeeAccount, StudentCategory } from "./types-crm";
 export type Role = "super_admin" | "admin" | "staff" | "student" | "college";
 export type StudentStatus = "active" | "on_hold" | "expired" | "completed" | "dropped";
@@ -209,6 +213,22 @@ export interface Drive {
   status: DriveStatus;
   sheet_id?: string | null;
   created_at?: string;
+  /** HR Management 360° drive configuration (see HrDriveConfig). */
+  hr_id?: string | null;
+  coordinator?: string | null;
+  vacancies?: number;
+  qualification?: string | null;
+  branches?: string | null;
+  passout?: string | null;
+  experience?: string | null;
+  interest_close_at?: string | null;
+  excel_due_at?: string | null;
+  sending_mode?: "after_approval" | "automatic";
+  jd_url?: string | null;
+  excel_format?: string | null;
+  consent_required?: boolean;
+  reminder_lead_days?: number;
+  confirmation?: "pending" | "tentative" | "confirmed" | "postponed" | "cancelled";
 }
 export interface DriveResponse {
   drive_id: string;
@@ -217,6 +237,7 @@ export interface DriveResponse {
   stage?: string | null;
   synced_to_sheet: boolean;
   synced_at?: string | null;
+  resume_id?: string | null;
   updated_at?: string;
 }
 export interface Staff {
@@ -233,6 +254,10 @@ export interface Staff {
   monthly_salary?: number | null;
   email?: string | null;
   phone?: string | null;
+  /** Deactivated staff keep their history but get no new work. */
+  active?: boolean;
+  counsellor?: boolean;
+  lead_capacity?: number;
 }
 export interface Letter {
   id: string;

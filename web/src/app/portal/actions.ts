@@ -9,7 +9,7 @@ import { getServiceRepo, getStudentReadRepo } from "@/lib/server";
 import { requireStudent } from "@/lib/session";
 import type { DriveResponseValue } from "@/lib/types";
 
-export async function respondAction(driveId: string, response: DriveResponseValue) {
+export async function respondAction(driveId: string, response: DriveResponseValue, form?: FormData) {
   const s = await requireStudent();
   // Reads and the write use the server's access, always scoped to the signed-in student's own id,
   // after every rule below has been checked (students' row-level permissions made this fragile).
@@ -23,6 +23,14 @@ export async function respondAction(driveId: string, response: DriveResponseValu
   const drive = (await svc.drives()).find((d) => d.id === driveId);
   if (!drive || drive.status !== "open") redirect("/portal/drives?error=closed");
   await svc.respond(driveId, s.studentId, response);
+  // The resume chosen for this drive (only one of the student's own).
+  const resumeId = response === "yes" ? String(form?.get("resume_id") ?? "") : "";
+  if (resumeId) {
+    const { getServiceStore } = await import("@/lib/session");
+    const db = getServiceStore();
+    const [own] = await db.select<{ id: string }>("student_resumes", { eq: { id: resumeId, student_id: s.studentId } });
+    if (own) await db.update("drive_responses", { drive_id: driveId, student_id: s.studentId }, { resume_id: resumeId });
+  }
   // "Yes" → auto-export to the drive's Google Sheet (best effort; admins can re-sync from the dashboard).
   if (response === "yes") await syncDriveToSheet(getServiceRepo(), driveId).catch(() => null);
   revalidatePath("/portal", "layout");

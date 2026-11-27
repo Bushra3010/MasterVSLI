@@ -16,6 +16,15 @@ export interface StudentExtra {
   before?: { designation?: string; from?: string; to?: string; location?: string };
   /** Placement after MasterVLSI. */
   placement?: { status?: string; company?: string; designation?: string; package?: string; doj?: string; hr_name?: string; hr_email?: string; location?: string };
+  career_objective?: string;
+  /** Gap in studies / career: from, to (YYYY-MM) and why. */
+  career_gap?: { from?: string; to?: string; reason?: string };
+  /** College students: university roll number and key contacts. */
+  college_info?: { roll_no?: string; department?: string; hod?: string; tpo?: string; faculty?: string };
+  /** Corporate students: employee, HR and reporting manager; billing is office-only. */
+  corporate?: { employee_id?: string; department?: string; hr_name?: string; hr_contact?: string; manager_name?: string; manager_contact?: string; billing?: string };
+  /** Filled after training validity expires. */
+  alumni?: import("./types-student360").AlumniProfile;
 }
 
 export type MasterCategory = "board" | "university" | "stream" | "contact_position" | "validity_months" | "designation";

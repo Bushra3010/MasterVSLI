@@ -93,7 +93,33 @@ export type TableName =
   // earn & rewards
   | "reward_settings"
   | "reward_program"
-  | "reward_goodies";
+  | "reward_goodies"
+  // student 360
+  | "student_resumes"
+  | "student_interviews"
+  | "payment_submissions"
+  | "student_requests"
+  | "reminder_acks"
+  // lead management 360
+  | "lead_tasks"
+  | "lead_allocations"
+  | "lead_settings"
+  | "lead_daily_reports"
+  // college management 360
+  | "college_activities"
+  | "college_submissions"
+  | "college_references"
+  | "college_opportunities"
+  | "college_events"
+  | "college_feedback"
+  | "college_finance"
+  | "college_documents"
+  // HR management 360
+  | "hr_activities"
+  | "hr_requirements"
+  | "hr_drive_tasks"
+  | "hr_submissions"
+  | "hr_feedback";
 
 export interface Query {
   eq?: Record<string, string | number | boolean | null>;

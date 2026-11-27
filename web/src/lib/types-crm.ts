@@ -2,17 +2,21 @@
 export type Company = "mastervlsi" | "enrich";
 export type StudentCategory = "normal" | "college" | "corporate";
 export type FeeAccount = "paka" | "kacha";
-export type LeadStage = "lead" | "interested" | "visited" | "enrolled" | "lost";
+/** Ten pipeline stages. Stored keys stay stable: "lead" = New lead, "enrolled" = Converted, "lost" = Not interested. */
+export type LeadStage = "lead" | "non_connected" | "connected" | "interested" | "visit_scheduled" | "visited" | "admission_pending" | "enrolled" | "lost" | "future_follow_up";
 
 export interface Branch { id: string; name: string; city?: string | null; domain?: string | null; company: Company }
 
 export interface College {
   id: string; code?: string | null; name: string; city?: string | null; state?: string | null; affiliation?: string | null;
   college_type?: string | null; since?: string | null; status: "partner" | "prospect" | "inactive";
+  stage?: import("./types-colleges").CollegeStage; assigned_to?: string | null; student_strength?: number; target_students?: number;
+  departments?: string | null; website?: string | null; next_follow_up?: string | null; follow_up_note?: string | null; source?: string | null; created_at?: string;
 }
 export interface TpoContact {
   id: string; college_id: string; name: string; designation?: string | null; phone?: string | null; alt_phone?: string | null;
   email?: string | null; is_primary: boolean; active: boolean; remarks?: string | null; next_follow_up?: string | null; last_interaction?: string | null;
+  department?: string | null; call_status?: "not_called" | "connected" | "non_connected";
 }
 export interface Mou {
   id: string; college_id: string; mou_no?: string | null; agreement_type: string; start_date?: string | null; end_date?: string | null;
@@ -37,6 +41,8 @@ export interface Lead {
   course_code?: string | null; stage: LeadStage; assigned_to?: string | null; next_follow_up?: string | null; follow_up_note?: string | null;
   batch_pref?: string | null; mode_pref?: string | null; fee_plan?: string | null; education?: string | null; remarks?: string | null;
   referred_by_student?: string | null; student_id?: string | null; stage_dates: Record<string, string>; created_at: string;
+  priority?: "low" | "normal" | "high" | "urgent"; allocation_deadline?: string | null; allocation_note?: string | null; allocated_at?: string | null;
+  allocated_by?: string | null; college_id?: string | null; archived?: boolean; archived_at?: string | null; archive_reason?: string | null; duplicate_of?: string | null;
 }
 export interface LeadActivity { id: string; lead_id: string; kind: string; summary: string; outcome?: string | null; by_name?: string | null; created_at: string }
 
@@ -44,9 +50,22 @@ export interface HrContact {
   id: string; full_name: string; designation?: string | null; department?: string | null; phone?: string | null; email?: string | null;
   linkedin?: string | null; city?: string | null; current_company?: string | null; company_type?: string | null; joined_on?: string | null;
   reference_note?: string | null; created_at?: string;
+  /** Permanent identity, kept for life even when the HR moves company. */
+  hr_code?: string | null;
+  stage?: string | null; relationship_status?: string | null; hiring_status?: string | null;
+  assigned_to?: string | null; alt_assigned_to?: string | null; introduced_by?: string | null; source?: string | null;
+  personal_email?: string | null; previous_company?: string | null; preferred_contact?: string | null;
+  next_follow_up?: string | null; follow_up_note?: string | null; last_verified?: string | null; active?: boolean;
 }
-export interface HrHistory { id: string; hr_id: string; company: string; designation?: string | null; from_date?: string | null; to_date?: string | null }
-export interface HrCall { id: string; hr_id: string; call_date: string; activity: string; outcome?: string | null; remarks?: string | null }
+/** One stint at one company. Rows are appended on a company change, never overwritten. */
+export interface HrHistory {
+  id: string; hr_id: string; company: string; designation?: string | null; from_date?: string | null; to_date?: string | null;
+  official_email?: string | null; location?: string | null; replacement_hr_id?: string | null; created_at?: string;
+}
+export interface HrCall {
+  id: string; hr_id: string; call_date: string; activity: string; outcome?: string | null; remarks?: string | null;
+  by_name?: string | null; mode?: string | null; created_at?: string;
+}
 
 export type AmbassadorKind = "referral" | "review" | "social" | "mentor" | "feedback" | "incident";
 export interface AmbassadorActivity {

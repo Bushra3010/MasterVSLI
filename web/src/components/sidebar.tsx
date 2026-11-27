@@ -45,7 +45,7 @@ import {
   Receipt,
   Send,
   Wallet,
-  type LucideIcon, CalendarRange, Trophy, HandCoins, ListChecks, TriangleAlert } from "lucide-react";
+  type LucideIcon, CalendarRange, Trophy, HandCoins, ListChecks, TriangleAlert, ClipboardList, CalendarCheck, Award, LifeBuoy, Clock } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -71,6 +71,7 @@ const staffNav: Section[] = [
     items: [
       { href: "/leads", label: "Lead Management", icon: Filter },
       { href: "/students", label: "Student Management", icon: Users },
+      { href: "/student-desk", label: "Student Desk & Approvals", icon: ClipboardList },
       { href: "/colleges", label: "College Management", icon: Building2 },
       { href: "/import", label: "Import & Export", icon: ArrowDownUp },
     ],
@@ -113,7 +114,7 @@ const staffNav: Section[] = [
     title: "Placements & Growth",
     items: [
       { href: "/placements", label: "Placement Management", icon: Briefcase },
-      { href: "/hr-contacts", label: "HR & Company Contacts", icon: Contact },
+      { href: "/hr-contacts", label: "HR Management 360°", icon: Contact },
       { href: "/ambassadors", label: "Brand Ambassadors", icon: Crown },
       { href: "/communication", label: "Communication", icon: MessageCircle },
     ],
@@ -156,12 +157,19 @@ const collegeNav: Section[] = [
 
 const studentNav: Section[] = [
   {
-    title: "My Training",
+    title: "Overview",
     items: [
-      { href: "/portal", label: "My Dashboard", icon: GraduationCap },
+      { href: "/portal", label: "Dashboard & Reminders", icon: GraduationCap },
       { href: "/portal/profile", label: "My Profile", icon: UserCog },
+    ],
+  },
+  {
+    title: "Training",
+    items: [
+      { href: "/portal/training", label: "Admission & Training", icon: ClipboardList },
       { href: "/portal/learning", label: "Learning & Assessments", icon: BookOpen },
-      { href: "/portal/documents", label: "My Documents", icon: BadgeCheck },
+      { href: "/portal/attendance", label: "Attendance", icon: CalendarCheck },
+      { href: "/portal/fees", label: "Fees & Payments", icon: Wallet },
     ],
   },
   {
@@ -169,6 +177,16 @@ const studentNav: Section[] = [
     items: [
       { href: "/portal/agreement", label: "Placement Agreement", icon: FileCheck2 },
       { href: "/portal/drives", label: "Company Drives", icon: Briefcase },
+      { href: "/portal/interviews", label: "Interviews & Offers", icon: CalendarClock },
+      { href: "/portal/resumes", label: "Resume Library", icon: FileText },
+    ],
+  },
+  {
+    title: "Certificates & Documents",
+    items: [
+      { href: "/portal/certificates", label: "Certificates", icon: Award },
+      { href: "/portal/documents", label: "My Documents", icon: BadgeCheck },
+      { href: "/portal/access", label: "Access & Groups", icon: KeyRound },
     ],
   },
   {
@@ -183,6 +201,13 @@ const studentNav: Section[] = [
     ],
   },
   {
+    title: "Support",
+    items: [
+      { href: "/portal/requests", label: "Requests & Support", icon: LifeBuoy },
+      { href: "/portal/history", label: "My History", icon: Clock },
+    ],
+  },
+  {
     title: "Account",
     items: [
       { href: "/portal/terms", label: "Terms & Conditions", icon: ScrollText },
@@ -190,11 +215,12 @@ const studentNav: Section[] = [
     ],
   },
 ];
+const alumniSection: Section = { title: "Alumni", items: [{ href: "/portal/alumni", label: "Alumni Profile", icon: Users }] };
 
-export function Sidebar({ role, name, demo, signOut }: { role: string; name: string; demo: boolean; signOut: () => Promise<void> }) {
+export function Sidebar({ role, name, demo, signOut, alumni = false }: { role: string; name: string; demo: boolean; signOut: () => Promise<void>; alumni?: boolean }) {
   const path = usePathname();
   const [open, setOpen] = useState(false);
-  const nav = (role === "student" ? studentNav : role === "college" ? collegeNav : staffNav).filter((sec) => !sec.adminOnly || role === "super_admin" || role === "admin");
+  const nav = (role === "student" ? (alumni ? [studentNav[0], alumniSection, ...studentNav.slice(1)] : studentNav) : role === "college" ? collegeNav : staffNav).filter((sec) => !sec.adminOnly || role === "super_admin" || role === "admin");
 
   const body = (
     <div className="flex h-full flex-col">

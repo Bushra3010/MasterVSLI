@@ -34,6 +34,10 @@ import { buildProfileSeed, type ProfileTables } from "./seed-profile";
 import { buildCalendarSeed, type CalendarTables } from "./seed-calendar";
 import { buildIncentiveSeed, type IncentiveTables } from "./seed-incentives";
 import { buildRewardSeed, type RewardTables } from "./seed-rewards";
+import { buildStudent360Seed, type Student360Tables } from "./seed-student360";
+import { buildLeadSeed, type LeadTables } from "./seed-leads";
+import { buildCollegeSeed, type CollegeTables } from "./seed-colleges";
+import { buildHrSeed, type HrTables } from "./seed-hr";
 
 /** Deterministic PRNG so demo data is stable across reloads. */
 function rng(seed: number) {
@@ -46,7 +50,7 @@ function rng(seed: number) {
   };
 }
 
-export interface DemoTables extends CrmTables, FinanceTables, ProfileTables, CalendarTables, IncentiveTables, RewardTables {
+export interface DemoTables extends CrmTables, FinanceTables, ProfileTables, CalendarTables, IncentiveTables, RewardTables, Student360Tables, LeadTables, CollegeTables, HrTables {
   courses: Course[];
   batches: Batch[];
   vendors: Vendor[];
@@ -303,10 +307,10 @@ export function buildSeed(): DemoTables {
   });
 
   const drives: Drive[] = [
-    { id: "dr-qcom", company: "Qualcomm", job_role: "Design Verification Engineer", location: "Bengaluru", drive_date: addDays(today, 18), interview_mode: "Online", ctc: "12–18 LPA", eligibility: "B.Tech/M.Tech ECE, 2023–2025, ≥ 65%", status: "open" },
-    { id: "dr-wipro", company: "Wipro", job_role: "ASIC Verification Engineer", location: "Bengaluru", drive_date: addDays(today, 24), interview_mode: "Offline", ctc: "6–8 LPA", eligibility: "B.E/B.Tech ECE/EEE", status: "open" },
-    { id: "dr-hcl", company: "HCLTech", job_role: "VLSI Engineer", location: "Noida", drive_date: addDays(today, 40), interview_mode: "Online", ctc: "5–7 LPA", eligibility: "Any DV/PD trained", status: "upcoming" },
-    { id: "dr-tcs", company: "TCS", job_role: "Physical Design Engineer", location: "Hyderabad", drive_date: addDays(today, -12), interview_mode: "Online", ctc: "5–6.5 LPA", eligibility: "PD batch", status: "closed" },
+    { id: "dr-qcom", company: "Qualcomm", job_role: "Design Verification Engineer", location: "Bengaluru", drive_date: addDays(today, 18), interview_mode: "Online", ctc: "12–18 LPA", eligibility: "B.Tech/M.Tech ECE, 2023–2025, ≥ 65%", status: "open", hr_id: "hr-1", coordinator: "Rakesh Kumar", confirmation: "confirmed", vacancies: 20, qualification: "BE / B.Tech / M.Tech", branches: "ECE / EEE", passout: "2024–2026", experience: "Freshers", interest_close_at: addDays(today, 15) + "T10:00:00Z", excel_due_at: addDays(today, 15) + "T12:00:00Z", sending_mode: "after_approval", excel_format: "Company-specific", consent_required: true, reminder_lead_days: 7 },
+    { id: "dr-wipro", company: "Wipro", job_role: "ASIC Verification Engineer", location: "Bengaluru", drive_date: addDays(today, 24), interview_mode: "Offline", ctc: "6–8 LPA", eligibility: "B.E/B.Tech ECE/EEE", status: "open", hr_id: "hr-2", coordinator: "Sowmya Rao", confirmation: "tentative", vacancies: 30, qualification: "BE / B.Tech", branches: "ECE / EEE", passout: "2024–2026", experience: "Freshers", sending_mode: "after_approval", consent_required: true, reminder_lead_days: 7 },
+    { id: "dr-hcl", company: "HCLTech", job_role: "VLSI Engineer", location: "Noida", drive_date: addDays(today, 40), interview_mode: "Online", ctc: "5–7 LPA", eligibility: "Any DV/PD trained", status: "upcoming", hr_id: "hr-3", coordinator: "Sowmya Rao", confirmation: "pending", vacancies: 25, reminder_lead_days: 7 },
+    { id: "dr-tcs", company: "TCS", job_role: "Physical Design Engineer", location: "Hyderabad", drive_date: addDays(today, -12), interview_mode: "Online", ctc: "5–6.5 LPA", eligibility: "PD batch", status: "closed", hr_id: "hr-1", coordinator: "Rakesh Kumar", confirmation: "confirmed", vacancies: 15, reminder_lead_days: 7 },
   ];
   const responses: DriveResponse[] = [];
   for (const s of students) {
@@ -328,8 +332,8 @@ export function buildSeed(): DemoTables {
   }
 
   const staff: Staff[] = [
-    { id: "st-1", employee_code: "MVE001", full_name: "Rakesh Kumar", designation: "Senior DV Trainer", department: "Training", joining_date: "2023-06-01", monthly_salary: 95000, email: "rakesh@mastervlsi.example", phone: "9900000001" },
-    { id: "st-2", employee_code: "MVE002", full_name: "Sowmya Rao", designation: "Placement Coordinator", department: "Placements", joining_date: "2024-02-15", monthly_salary: 55000, email: "sowmya@mastervlsi.example", phone: "9900000002" },
+    { id: "st-1", active: true, counsellor: true, lead_capacity: 30, employee_code: "MVE001", full_name: "Rakesh Kumar", designation: "Senior DV Trainer", department: "Training", joining_date: "2023-06-01", monthly_salary: 95000, email: "rakesh@mastervlsi.example", phone: "9900000001" },
+    { id: "st-2", active: true, counsellor: true, lead_capacity: 30, employee_code: "MVE002", full_name: "Sowmya Rao", designation: "Placement Coordinator", department: "Placements", joining_date: "2024-02-15", monthly_salary: 55000, email: "sowmya@mastervlsi.example", phone: "9900000002" },
     { id: "st-3", employee_code: "MVE003", full_name: "Imran Sheikh", designation: "PD Trainer", department: "Training", joining_date: "2024-09-01", monthly_salary: 85000, email: "imran@mastervlsi.example", phone: "9900000003" },
   ];
 
@@ -378,6 +382,10 @@ export function buildSeed(): DemoTables {
     ...buildCalendarSeed(today, staff),
     ...buildIncentiveSeed(today, staff),
     ...buildRewardSeed(today, students),
+    ...buildStudent360Seed(today, students, installments, drives),
+    ...buildLeadSeed(crm.leads),
+    ...buildCollegeSeed(today, students),
+    ...buildHrSeed(today, drives),
     courses,
     batches,
     vendors,

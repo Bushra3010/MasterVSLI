@@ -127,10 +127,13 @@ export function buildCrmSeed(today: string, r: () => number, students: Student[]
   );
 
   const colleges: College[] = [
-    { id: "col-atme", code: "CLG-ATME-001", name: "ATME College of Engineering", city: "Mysuru", state: "Karnataka", affiliation: "VTU", college_type: "Private", since: "2024-06-01", status: "partner" },
-    { id: "col-bms", code: "CLG-BMS-002", name: "BMS Institute of Technology", city: "Bengaluru", state: "Karnataka", affiliation: "VTU", college_type: "Private", since: "2024-07-15", status: "partner" },
-    { id: "col-pes", code: "CLG-PES-003", name: "PES University", city: "Bengaluru", state: "Karnataka", affiliation: "Autonomous", college_type: "Private", since: "2024-09-20", status: "partner" },
-    { id: "col-jntu", code: "CLG-JNTU-004", name: "JNTU Hyderabad", city: "Hyderabad", state: "Telangana", affiliation: "JNTU", college_type: "Government", since: null, status: "prospect" },
+    { id: "col-atme", code: "CLG-ATME-001", name: "ATME College of Engineering", city: "Mysuru", state: "Karnataka", affiliation: "VTU", college_type: "Private", since: "2024-06-01", status: "partner", stage: "mou_signed", assigned_to: "Rakesh Kumar", student_strength: 3200, target_students: 840, departments: "ECE, EEE, CSE", next_follow_up: ts(3, 5), follow_up_note: "Plan DV seminar for 3rd years" },
+    { id: "col-bms", code: "CLG-BMS-002", name: "BMS Institute of Technology", city: "Bengaluru", state: "Karnataka", affiliation: "VTU", college_type: "Private", since: "2024-07-15", status: "partner", stage: "mou_signed", assigned_to: "Sowmya Rao", student_strength: 2400, target_students: 600, departments: "ECE, EEE" },
+    { id: "col-pes", code: "CLG-PES-003", name: "PES University", city: "Bengaluru", state: "Karnataka", affiliation: "Autonomous", college_type: "Private", since: "2024-09-20", status: "partner", stage: "proposal_sent", assigned_to: "Rakesh Kumar", student_strength: 4000, target_students: 900, departments: "ECE, EEE, CSE, ISE", next_follow_up: ts(-1, 5), follow_up_note: "Chase proposal approval" },
+    { id: "col-jntu", code: "CLG-JNTU-004", name: "JNTU Hyderabad", city: "Hyderabad", state: "Telangana", affiliation: "JNTU", college_type: "Government", since: null, status: "prospect", stage: "interested", assigned_to: "Sowmya Rao", student_strength: 5000, target_students: 1000, departments: "ECE" },
+    { id: "col-sit", code: "CLG-SIT-005", name: "Siddaganga Institute of Technology", city: "Tumakuru", state: "Karnataka", affiliation: "VTU", college_type: "Private", since: null, status: "prospect", stage: "new", assigned_to: null, student_strength: 1800, target_students: 450, departments: "ECE" },
+    { id: "col-mce", code: "CLG-MCE-006", name: "Malnad College of Engineering", city: "Hassan", state: "Karnataka", affiliation: "VTU", college_type: "Private-aided", since: null, status: "prospect", stage: "meeting_scheduled", assigned_to: "Rakesh Kumar", student_strength: 1200, target_students: 300, next_follow_up: ts(2, 5), follow_up_note: "Meet the principal and HOD ECE" },
+    { id: "col-kle", code: "CLG-KLE-007", name: "KLE Technological University", city: "Hubballi", state: "Karnataka", affiliation: "Autonomous", college_type: "Private", since: null, status: "prospect", stage: "non_connected", assigned_to: "Sowmya Rao", student_strength: 1600, target_students: 400 },
   ];
   const tpo_contacts: TpoContact[] = [
     { id: "tpo-1", college_id: "col-atme", name: "Dr. Manjunath R", designation: "Training & Placement Officer", phone: "9845011223", alt_phone: "9141177889", email: "tpo@atme.example", is_primary: true, active: true, remarks: "Supportive, open for trainings & drives", next_follow_up: ts(3, 5), last_interaction: addDays(today, -4) },
@@ -171,15 +174,18 @@ export function buildCrmSeed(today: string, r: () => number, students: Student[]
     ["Sneha Kulkarni", "WhatsApp", "PD", "lead", 0], ["Aditya Kumar", "Referral", "DV", "lead", -1], ["Pooja M", "Manual call", "DFT", "lead", -4],
     ["Neha R", "WhatsApp", "DV", "interested", -2], ["Deepak L", "Instagram", "PD", "visited", -5], ["Manjunath P", "Referral", "DV", "interested", -1],
     ["Rakesh K", "Website", "AL", "visited", -7], ["Karthik Reddy", "Website", "DV", "lead", -1], ["Pooja Nair", "Website", "PD", "lost", -9],
+    ["Priya S", "Website", "DV", "non_connected", -2], ["Sanjay R", "WhatsApp", "PD", "connected", -1], ["Arjun K", "Referral", "DV", "visit_scheduled", -1],
+    ["Manoj H", "Walk-in", "DV", "admission_pending", -4], ["Vijay K", "Google", "PD", "future_follow_up", -12],
   ];
   const leads: Lead[] = leadNames.map(([full_name, source, course_code, stage, d], k) => {
     const stage_dates: Record<string, string> = { lead: ts(d - 2) };
-    if (["interested", "visited"].includes(stage)) stage_dates.interested = ts(d - 1);
+    if (["interested", "visited", "visit_scheduled", "admission_pending"].includes(stage)) stage_dates.interested = ts(d - 1);
+    if (stage !== "lead" && stage !== "interested" && stage !== "visited") stage_dates[stage] = ts(d);
     if (stage === "visited") stage_dates.visited = ts(d);
     return {
       id: `ld-${k + 1}`, lead_no: `MVL-LEAD-${String(8450 + k)}`, full_name, phone: `98${String(76500000 + k * 1111).slice(0, 8)}`,
       email: `${full_name.split(" ")[0].toLowerCase()}@example.com`, city: k % 2 ? "Bengaluru" : "Hyderabad", source, course_code, stage,
-      assigned_to: k % 2 ? "Sowmya Rao" : "Rakesh Kumar", next_follow_up: stage === "lost" ? null : ts(1 + (k % 3), 5),
+      assigned_to: k % 2 ? "Sowmya Rao" : "Rakesh Kumar", next_follow_up: stage === "lost" ? null : k === 12 ? ts(-1, 5) : ts(1 + (k % 3), 5),
       follow_up_note: stage === "visited" ? "Confirm enrollment & preferred batch" : "Share fee & batch details",
       batch_pref: "Dec 2026", mode_pref: k % 2 ? "Online" : "Offline", fee_plan: "Installment", education: "B.E ECE 2024",
       remarks: stage === "visited" ? "Liked the curriculum and placement support" : null,
@@ -193,20 +199,24 @@ export function buildCrmSeed(today: string, r: () => number, students: Student[]
   }
 
   const hr_contacts: HrContact[] = [
-    { id: "hr-1", full_name: "Priya Sharma", designation: "HR Manager", department: "Human Resources", phone: "9876543210", email: "priya.sharma@abctech.example", linkedin: "linkedin.com/in/priyasharma", city: "Bangalore", current_company: "ABC Technologies Pvt. Ltd.", company_type: "IT Services", joined_on: "2024-04-15", reference_note: "Known since TechSolutions India. Hired our students in 2022 & 2023 batches. Good reference for future hiring." },
-    { id: "hr-2", full_name: "Rohan Kapoor", designation: "Talent Acquisition Lead", department: "HR", phone: "9811122233", email: "rohan@techvision.example", linkedin: null, city: "Hyderabad", current_company: "TechVision Solutions", company_type: "Semiconductor", joined_on: "2023-02-01", reference_note: null },
-    { id: "hr-3", full_name: "Anjali Singh", designation: "Senior Recruiter", department: "HR", phone: "9822233344", email: "anjali@globalinfotech.example", linkedin: null, city: "Bangalore", current_company: "Global Infotech Ltd.", company_type: "VLSI Services", joined_on: "2022-08-10", reference_note: null },
+    { id: "hr-1", hr_code: "HR-0001", full_name: "Priya Sharma", designation: "HR Manager", department: "Human Resources", phone: "9876543210", email: "priya.sharma@qualcomm.example", personal_email: "priya.sharma.hr@example.com", linkedin: "linkedin.com/in/priyasharma", city: "Bangalore", current_company: "Qualcomm", company_type: "Semiconductor", joined_on: "2026-02-01", previous_company: "ABC Technologies Pvt. Ltd.", stage: "active_hiring", relationship_status: "strong", hiring_status: "active_hiring", assigned_to: "Rakesh Kumar", alt_assigned_to: "Sowmya Rao", introduced_by: "Rakesh Kumar", source: "employee_reference", preferred_contact: "Call", next_follow_up: ts(1, 10), follow_up_note: "Confirm December drive and collect JD", last_verified: addDays(today, -4), active: true, reference_note: "Known since TechSolutions India. Hired our students in 2022 & 2023 batches. Good reference for future hiring." },
+    { id: "hr-2", hr_code: "HR-0002", full_name: "Rohan Kapoor", designation: "Talent Acquisition Lead", department: "HR", phone: "9811122233", email: "rohan@techvision.example", linkedin: null, city: "Hyderabad", current_company: "TechVision Solutions", company_type: "Semiconductor", joined_on: "2023-02-01", stage: "rapport_building", relationship_status: "developing", hiring_status: "future_hiring", assigned_to: "Sowmya Rao", introduced_by: "Sowmya Rao", source: "linkedin", preferred_contact: "Email", last_verified: addDays(today, -30), active: true, reference_note: null },
+    { id: "hr-3", hr_code: "HR-0003", full_name: "Anjali Singh", designation: "Senior Recruiter", department: "HR", phone: "9822233344", email: "anjali@globalinfotech.example", linkedin: null, city: "Bangalore", current_company: "Global Infotech Ltd.", company_type: "VLSI Services", joined_on: "2022-08-10", stage: "new_hr", relationship_status: "new", hiring_status: "unknown", assigned_to: null, source: "cold_call", active: true, reference_note: null },
   ];
   const hr_company_history: HrHistory[] = [
-    { id: "hh-1", hr_id: "hr-1", company: "ABC Technologies Pvt. Ltd.", designation: "HR Manager", from_date: "2024-04-15", to_date: null },
-    { id: "hh-2", hr_id: "hr-1", company: "TechSolutions India Pvt. Ltd.", designation: "Senior HR Executive", from_date: "2021-06-01", to_date: "2024-04-10" },
-    { id: "hh-3", hr_id: "hr-1", company: "BrightMind Systems", designation: "HR Executive", from_date: "2019-01-15", to_date: "2021-05-31" },
-    { id: "hh-4", hr_id: "hr-2", company: "TechVision Solutions", designation: "Talent Acquisition Lead", from_date: "2023-02-01", to_date: null },
+    { id: "hh-0", hr_id: "hr-1", company: "Qualcomm", designation: "HR Manager", from_date: "2026-02-01", to_date: null, official_email: "priya.sharma@qualcomm.example", location: "Bangalore" },
+    { id: "hh-1", hr_id: "hr-1", company: "ABC Technologies Pvt. Ltd.", designation: "HR Manager", from_date: "2024-04-15", to_date: "2026-01-28", official_email: "priya.sharma@abctech.example", location: "Bangalore" },
+    { id: "hh-2", hr_id: "hr-1", company: "TechSolutions India Pvt. Ltd.", designation: "Senior HR Executive", from_date: "2021-06-01", to_date: "2024-04-10", official_email: "priya@techsolutions.example", location: "Bangalore" },
+    { id: "hh-3", hr_id: "hr-1", company: "BrightMind Systems", designation: "HR Executive", from_date: "2019-01-15", to_date: "2021-05-31", official_email: "priya@brightmind.example", location: "Pune" },
+    { id: "hh-4", hr_id: "hr-2", company: "TechVision Solutions", designation: "Talent Acquisition Lead", from_date: "2023-02-01", to_date: null, official_email: "rohan@techvision.example", location: "Hyderabad" },
+    { id: "hh-5", hr_id: "hr-3", company: "Global Infotech Ltd.", designation: "Senior Recruiter", from_date: "2022-08-10", to_date: null, official_email: "anjali@globalinfotech.example", location: "Bangalore" },
   ];
   const hr_calls: HrCall[] = [
-    { id: "hc-1", hr_id: "hr-1", call_date: addDays(today, -4), activity: "Placement discussion", outcome: "Interested", remarks: "Open for 2026 batch hiring. Share student profiles." },
-    { id: "hc-2", hr_id: "hr-1", call_date: addDays(today, -14), activity: "Follow-up", outcome: "To follow up", remarks: "Will check requirement and revert next week." },
-    { id: "hc-3", hr_id: "hr-2", call_date: addDays(today, -30), activity: "Introduction call", outcome: "Connected", remarks: "Introduced our placement services." },
+    { id: "hc-1", hr_id: "hr-1", call_date: addDays(today, -4), mode: "call", by_name: "Rakesh Kumar", activity: "Placement discussion", outcome: "Interested", remarks: "Open for 2026 batch hiring. Share student profiles." },
+    { id: "hc-2", hr_id: "hr-1", call_date: addDays(today, -14), mode: "email", by_name: "Sowmya Rao", activity: "Follow-up", outcome: "Replied", remarks: "Will check requirement and revert next week." },
+    { id: "hc-3", hr_id: "hr-1", call_date: addDays(today, -22), mode: "meeting", by_name: "Rakesh Kumar", activity: "Placement discussion", outcome: "Connected", remarks: "Met at the Bengaluru office; agreed on a December drive." },
+    { id: "hc-4", hr_id: "hr-1", call_date: addDays(today, -40), mode: "whatsapp", by_name: "Imran Sheikh", activity: "Follow-up", outcome: "Replied", remarks: "Shared the institute profile deck." },
+    { id: "hc-5", hr_id: "hr-2", call_date: addDays(today, -30), mode: "call", by_name: "Sowmya Rao", activity: "Introduction call", outcome: "Connected", remarks: "Introduced our placement services." },
   ];
 
   const ambassador_activities: AmbassadorActivity[] = [

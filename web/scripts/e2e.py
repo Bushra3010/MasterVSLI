@@ -425,7 +425,14 @@ check("expired: status Expired and all 5 channels blocked", "Expired" in t and t
 s, _, raw = http("POST", "/api/webhooks/biometric", "", json.dumps({"punches": [{"device_id": "D1", "user_code": "E2E-BIO-1", "timestamp": f"{TODAY}T05:00:00Z"}]}).encode(), BIO)
 check("expired: biometric refused", b'"ok":false' in raw, raw[:200])
 NEW = f"mvl_demo=student:{new_id}"
-_, _, html = get("/portal", NEW)
+s, final, html = get("/portal", NEW)
+check("expired: Alumni Profile opens automatically on the next login", final.startswith("/portal/alumni") and "Alumni Profile" in text(html), final)
+check("expired: Alumni Profile appears in the menu", 'href="/portal/alumni"' in html)
+f = find_form(html, must=["company", "designation", "hiring"])
+s, loc, _ = submit("/portal/alumni", NEW, f, {"company": "E2E Silicon Pvt Ltd", "designation": "DV Engineer", "participation": "Mock interviews", "chg.0.company": "E2E First Co"})
+check("expired: alumni profile saved", "saved=" in (loc or ""), loc)
+_, final, html = get("/portal", NEW)
+check("expired: dashboard opens once the alumni profile is filled", final == "/portal", final)
 check("expired: portal shows paused notice", "paused" in text(html) and "expired" in text(html).lower())
 _, _, html = get("/portal/drives", NEW)
 check("expired: portal placement applications unavailable", "blocked" in text(html).lower() or "not active" in text(html).lower())
@@ -435,6 +442,9 @@ submit(SP, ADMIN, find_form(prof, button="Renew +6 months"), button="Renew +6 mo
 _, _, prof = get(SP, ADMIN)
 t = text(prof)
 check("renewal: active again with a future end date", "Active" in t and "Blocked" not in t and "Valid till" in t)
+_, _, html = get("/portal", NEW)
+check("renewal: Alumni Profile hidden again while training is valid", 'href="/portal/alumni"' not in html)
+check("renewal: alumni history kept", "E2E Silicon Pvt Ltd" in get("/portal/alumni", NEW)[2] or "opens after your training validity ends" in text(get("/portal/alumni", NEW)[2]))
 
 # 17. drive status: closed drives disappear from the portal
 _, _, html = get(f"/placements?drive={drive}", ADMIN)
@@ -945,6 +955,274 @@ i = html.index("Reward claims")
 fm = next(x for x in forms_of(html) if x["start"] > i and any("Mark collected" in b["text"] for b in x["buttons"]))
 s, loc, _ = submit("/ambassadors", ADMIN, fm, button="Mark collected")
 check("goodie marked collected", "saved=" in (loc or ""), loc)
+
+# 30. Student Management 360°: reminders, profile completion, payments with office approval, requests,
+#     validity extension, interviews (upcoming / missed with explanation), resume library, history
+for p in ["/portal", "/portal/training", "/portal/attendance", "/portal/fees", "/portal/interviews", "/portal/resumes", "/portal/requests",
+          "/portal/certificates", "/portal/access", "/portal/history", "/portal/alumni"]:
+    s, final, html = get(p, STU)
+    check(f"360 page {p}", s == 200 and final == p and "Application error" not in html, f"status {s} at {final}")
+    if p not in ("/portal", "/portal/alumni"):
+        check(f"reminder center shown on {p}", 'data-testid="action-strip"' in html)
+_, _, html = get("/portal", STU)
+t = text(html)
+check("dashboard: profile completion and overview KPIs", re.search(r"Profile completion: \d+%", t) is not None and all(k in t for k in ["Pending activities", "Upcoming interviews", "Missed interviews", "Last attendance", "Outstanding fee", "Learning progress", "Training expiry"]))
+check("alumni menu hidden during training", 'href="/portal/alumni"' not in html)
+_, _, html = get("/portal/alumni", STU)
+check("alumni profile locked during training", "opens after your training validity ends" in text(html))
+s, final, _ = get("/student-desk", STU)
+check("students can't open the student desk", final != "/student-desk")
+s, final, html = get("/student-desk", ADMIN)
+check("student desk opens for staff", s == 200 and "Payment verification" in html)
+
+# profile: career objective counts toward completion; husband details only for married female students
+_, _, html = get("/portal/profile", STU)
+f = find_form(html, must=["full_name", "career_objective"])
+submit("/portal/profile", STU, f, {"career_objective": "E2E objective: become a DV engineer", "gender": "Male", "marital_status": "Married"})
+_, _, html = get("/portal/profile", STU)
+check("career objective saved", "E2E objective: become a DV engineer" in html)
+check("no husband section for a male student", "Husband details" not in html)
+_, _, html = get("/portal", STU)
+check("career objective no longer missing", "Career objective" not in text(html).split("Profile completion")[1][:400] if "Profile completion" in text(html) else False)
+
+# fees: student submits → pending → office approves → receipt
+_, _, html = get("/portal/fees", STU)
+receipts_before = html.count('href="/portal/receipt/')
+try:
+    f = find_form(html, must=["installment_id", "amount", "mode"])
+except AssertionError:
+    f = None
+check("fees page has the payment submission form", f is not None or "All installments are paid" in html)
+if f:
+    s, loc, _ = submit("/portal/fees", STU, f, {"amount": "1234", "mode": "UPI", "reference": "", "paid_on": str(TODAY)})
+    check("UPI submission without a reference is refused", "error=" in (loc or ""), loc)
+    s, loc, _ = submit("/portal/fees", STU, f, {"amount": "1234", "mode": "UPI", "reference": "E2E-UTR-555", "paid_on": str(TODAY)},
+                       files={"proof": ("proof.png", "image/png", b"\x89PNG\r\n\x1a\n" + b"0" * 64)})
+    check("student submits a payment", "saved=" in (loc or ""), loc)
+    _, _, html = get("/portal/fees", STU)
+    check("submission waits for office verification (no receipt yet)", "Pending verification" in html and html.count('href="/portal/receipt/') == receipts_before)
+    _, _, desk = get("/student-desk?tab=payments", ADMIN)
+    check("office sees the submission with proof", "E2E-UTR-555" in desk and "/api/documents/" in desk)
+    i = desk.index("E2E-UTR-555")
+    fm = next(x for x in forms_of(desk) if x["start"] > i and any("Approve" in b["text"] for b in x["buttons"]))
+    s, loc, _ = submit("/student-desk", ADMIN, fm, {"office_note": "E2E verified"}, button="Approve")
+    check("office approves the payment", "saved=" in (loc or ""), loc)
+    _, _, html = get("/portal/fees", STU)
+    check("receipt available after approval", html.count('href="/portal/receipt/') == receipts_before + 1 and "E2E verified" in html)
+
+# requests: certificate application → office approval
+_, _, html = get("/portal/requests?kind=certificate", STU)
+s, loc, _ = submit("/portal/requests", STU, find_form(html, must=["kind", "cert_type"]), {"cert_type": "Course completion", "details": "E2E certificate request"})
+check("certificate application sent", "saved=" in (loc or ""), loc)
+_, _, desk = get("/student-desk?tab=requests", ADMIN)
+i = desk.index("E2E certificate request")
+fm = next(x for x in forms_of(desk) if x["start"] > i and "response" in x["names"])
+s, loc, _ = submit("/student-desk", ADMIN, fm, {"status": "approved", "response": "E2E certificate ready"})
+check("office approves the certificate request", "saved=" in (loc or ""), loc)
+check("student sees the approval on Certificates", "E2E certificate ready" in get("/portal/certificates", STU)[2])
+s, loc, _ = submit("/portal/requests", STU, find_form(get("/portal/requests?kind=support", STU)[2], must=["kind", "subject"]), {"subject": "E2E ticket", "details": "Lab PC 4 is slow"})
+check("support ticket raised", "saved=" in (loc or ""), loc)
+
+# validity extension: one open request at a time; approval extends validity
+_, _, html = get("/portal/requests?kind=validity_extension", STU)
+f = find_form(html, must=["kind", "months"])
+s, loc, _ = submit("/portal/requests", STU, f, {"months": "3", "details": "E2E extension"})
+first = "saved=" in (loc or "")
+s, loc2, _ = submit("/portal/requests", STU, f, {"months": "3", "details": "E2E extension again"})
+check("only one open validity extension at a time", "error=" in (loc2 or ""), loc2)
+before = re.search(r"Valid until\s+([0-9A-Za-z ]+?\d{4})", text(get("/portal/training", STU)[2]))
+_, _, desk = get("/student-desk?tab=requests", ADMIN)
+i = desk.index("Validity extension")
+fm = next(x for x in forms_of(desk) if x["start"] > i and "response" in x["names"])
+submit("/student-desk", ADMIN, fm, {"status": "approved", "response": "E2E extended"})
+after = re.search(r"Valid until\s+([0-9A-Za-z ]+?\d{4})", text(get("/portal/training", STU)[2]))
+check("approved extension moves the validity date", before and after and before[1] != after[1], f"{before and before[1]} -> {after and after[1]}")
+
+# interviews: scheduled → reminder (acknowledge) → missed → explanation
+_, _, desk = get("/student-desk?tab=interviews", ADMIN)
+f = find_form(desk, must=["student_id", "company", "date"])
+s, loc, _ = submit("/student-desk", ADMIN, f, {"student_id": "s-002", "company": "E2E Chips", "date": str(TODAY + dt.timedelta(days=2)), "time": "11:00", "round": "Technical 1", "call_letter_url": "javascript:alert(1)"})
+check("call letter link must be https", "error=" in (loc or ""), loc)
+s, loc, _ = submit("/student-desk", ADMIN, f, {"student_id": "s-002", "company": "E2E Chips", "date": str(TODAY + dt.timedelta(days=2)), "time": "11:00", "round": "Technical 1", "call_letter_url": "https://example.com/e2e-call-letter.pdf"})
+check("office schedules an interview", "saved=" in (loc or ""), loc)
+_, _, html = get("/portal", STU)
+check("upcoming interview appears in the student's reminders", "Upcoming interview — E2E Chips" in html)
+check("call letter shown on interviews page", "https://example.com/e2e-call-letter.pdf" in get("/portal/interviews", STU)[2])
+i = html.index("Upcoming interview — E2E Chips", html.index('id="actions"'))
+fm = next(x for x in forms_of(html) if x["start"] > i and any("Acknowledge" in b["text"] for b in x["buttons"]))
+submit("/portal", STU, fm, button="Acknowledge")
+check("acknowledged reminder is hidden", "Upcoming interview — E2E Chips" not in get("/portal", STU)[2])
+_, _, desk = get("/student-desk?tab=interviews", ADMIN)
+i = desk.index("E2E Chips")
+fm = next(x for x in forms_of(desk) if x["start"] > i and "outcome" in x["names"])
+s, loc, _ = submit("/student-desk", ADMIN, fm, {"status": "missed", "outcome": ""})
+check("office marks the interview missed", "saved=" in (loc or ""), loc)
+_, _, html = get("/portal", STU)
+check("missed interview stays in reminders until explained", "Missed interview — E2E Chips" in html)
+_, _, html = get("/portal/interviews", STU)
+i = html.index("E2E Chips")
+fm = next(x for x in forms_of(html) if x["start"] > i and "explanation" in x["names"])
+s, loc, _ = submit("/portal/interviews", STU, fm, {"explanation": "short"})
+check("too-short explanation refused", "error=" in (loc or ""), loc)
+s, loc, _ = submit("/portal/interviews", STU, fm, {"explanation": "E2E: I was unwell with fever that day and could not join."})
+check("student explains the missed interview", "saved=" in (loc or ""), loc)
+check("explained interview leaves the reminders", "Missed interview — E2E Chips" not in get("/portal", STU)[2])
+check("office reads the explanation", "I was unwell with fever" in get("/student-desk?tab=interviews", ADMIN)[2])
+
+# resume library: upload, default, choose for a drive
+_, _, html = get("/portal/resumes", STU)
+s, loc, _ = submit("/portal/resumes", STU, find_form(html, must=["title", "domain", "version"]), {"title": "E2E PD Resume", "domain": "Physical Design", "version": "v2"},
+                   files={"file": ("resume.pdf", "application/pdf", b"%PDF-1.4\n%e2e\n")})
+check("resume uploaded to the library", "saved=" in (loc or ""), loc)
+_, _, html = get("/portal/resumes", STU)
+check("resume listed with domain and version", "E2E PD Resume" in html and "Physical Design" in html and "v2" in html)
+_, _, html = get("/portal/drives", STU)
+if "resume_id" in html:
+    f = find_form(html, must=["resume_id"], button="Yes, interested")
+    rid = next((o for o in f["selects"]["resume_id"]["options"]), "")
+    m = re.search(r'<option value="([^"]+)">E2E PD Resume', html)
+    submit("/portal/drives", STU, f, {"resume_id": m[1] if m else rid}, button="Yes, interested")
+    check("drive answer records the chosen resume", "Resume: " in text(get("/portal/drives", STU)[2]) and "E2E PD Resume" in get("/portal/drives", STU)[2])
+else:
+    check("drives page offers a resume choice", False, "no resume select")
+
+# history & staff summary
+check("history timeline lists the student's activity", all(k in text(get("/portal/history", STU)[2]) for k in ["Admitted to", "Interview with E2E Chips"]))
+_, _, html = get("/students/s-002", ADMIN)
+check("office student page shows completion and reminders", "Profile completion:" in text(html) and "Student reminders" in text(html))
+
+# 31. Lead Management 360°: tabs, 10-stage pipeline, duplicate prevention, bulk upload, allocation,
+#     counsellor workspace, mandatory follow-up remarks, daily report (+ automatic), archive
+TABS31 = ["dashboard", "all", "pipeline", "allocation", "workspace", "followups", "report", "calendar", "upload", "duplicates", "counsellors", "admissions", "analytics", "history", "audit", "archive"]
+for t_ in TABS31:
+    s, final, html = get(f"/leads?tab={t_}", ADMIN)
+    check(f"leads tab {t_}", s == 200 and "Application error" not in html and "Lead Management 360" in html, f"status {s}")
+_, _, html = get("/leads?tab=pipeline", ADMIN)
+check("pipeline has all ten stages", all(k in text(html) for k in ["New lead", "Non-connected", "Connected", "Interested", "Visit scheduled", "Visited", "Admission pending", "Converted", "Not interested", "Future follow-up"]))
+s, final, _ = get("/leads", STU)
+check("students can't open lead management", not final.startswith("/leads"))
+_, _, html = get("/leads", ADMIN)
+f = find_form(html, must=["full_name", "source"])
+existing = re.search(r"98\d{8}", text(get("/leads?tab=all", ADMIN)[2]))[0]
+s, loc, _ = submit("/leads", ADMIN, f, {"full_name": "E2E Dup Lead", "phone": "+91 " + existing, "source": "Website"})
+check("duplicate mobile (another lead) is refused", "error=" in (loc or "") and "Duplicate" in urllib.parse.unquote(loc or ""), loc)
+stu_phone = re.search(r"\b(9\d{9})\b", text(get("/students/s-003", ADMIN)[2]))
+if stu_phone:
+    s, loc, _ = submit("/leads", ADMIN, f, {"full_name": "E2E Student Dup", "phone": stu_phone[1], "source": "Website"})
+    check("duplicate mobile (registered student) is refused", "error=" in (loc or "") and "student" in urllib.parse.unquote(loc or ""), loc)
+s, loc, _ = submit("/leads", ADMIN, f, {"full_name": "E2E Lead360", "phone": "9444400001", "source": "Website", "assigned_to": "Rakesh Kumar"})
+lead360 = (re.search(r"id=([\w-]+)", loc or "") or [None, None])[1]
+check("new lead saved and allocated", bool(lead360), loc)
+check("allocation logged with the creator", "Allocated to Rakesh Kumar" in get(f"/leads?id={lead360}", ADMIN)[2])
+
+# bulk upload: in-file duplicate, existing number and invalid rows are removed
+_, _, html = get("/leads?tab=upload", ADMIN)
+csv_rows = "name,phone,email,city\nE2E Bulk One,9444400002,b1@example.com,Mysuru\nE2E Bulk Again,94444 00002,,\nE2E Existing,9444400001,,\nNo Phone,,,\n"
+s, loc, _ = submit("/leads", ADMIN, find_form(html, must=["csv", "source"]), {"csv": csv_rows, "to": ""})
+msg = urllib.parse.unquote(loc or "")
+check("bulk upload removes duplicates", "1 added" in msg and "2 duplicates removed" in msg and "1 rows skipped" in msg, msg)
+_, _, html = get("/leads?tab=allocation", ADMIN)
+check("uploaded lead waits in Unassigned", "E2E Bulk One" in html)
+i = html.index('id="unassigned"')
+fm = next(x for x in forms_of(html) if x["start"] >= i - 50 and "ids" in x["names"])
+vals = {"to": "Sowmya Rao", "deadline_date": str(TODAY + dt.timedelta(days=1)), "deadline_time": "13:00", "priority": "high", "instructions": "E2E call before 1 PM"}
+# tick only the uploaded lead
+bulk_id = re.search(r'value="([\w-]+)"[^>]*aria-label="Select E2E Bulk One"', html) or re.search(r'aria-label="Select E2E Bulk One"[^>]*value="([\w-]+)"', html)
+fm["fields"] = [x for x in fm["fields"] if x[0] != "ids"]
+s, loc, _ = submit("/leads", ADMIN, fm, {**vals, "ids": bulk_id[1] if bulk_id else ""})
+check("bulk allocation with deadline, priority and instructions", "saved=" in (loc or "") and "Sowmya" in urllib.parse.unquote(loc or ""), loc)
+_, _, html = get("/leads?tab=workspace&as=Sowmya Rao".replace(" ", "%20"), ADMIN)
+check("counsellor workspace shows the new allocation", "New allocation: E2E Bulk One" in text(html) and "E2E call before 1 PM" in text(html))
+check("allocation history records it", "E2E call before 1 PM" in get("/leads?tab=history", ADMIN)[2])
+
+# reallocation of the created lead from Rakesh to Sowmya
+_, _, html = get("/leads?tab=allocation", ADMIN)
+fm = find_form(html, must=["ids", "to"], button="Allocate lead")
+s, loc, _ = submit("/leads", ADMIN, fm, {"ids": lead360, "to": "Sowmya Rao"})
+check("reallocation saved", "saved=" in (loc or ""), loc)
+check("reallocation keeps the earlier counsellor in history", "Reallocated from Rakesh Kumar to Sowmya Rao" in get(f"/leads?id={lead360}", ADMIN)[2])
+
+# follow-up: remarks and next action are mandatory
+bid = bulk_id[1]
+_, _, html = get(f"/leads?id={bid}", ADMIN)
+fm = find_form(html, must=["outcome", "remarks", "next_action"])
+s, loc, _ = submit("/leads", ADMIN, fm, {"outcome": "interested", "remarks": "", "next_action": "x", "next_date": str(TODAY + dt.timedelta(days=2))})
+check("follow-up without remarks refused", "error=" in (loc or ""), loc)
+s, loc, _ = submit("/leads", ADMIN, fm, {"outcome": "interested", "remarks": "E2E spoke about DV batch and fee", "next_action": "", "next_date": ""})
+check("follow-up without next action refused", "error=" in (loc or ""), loc)
+s, loc, _ = submit("/leads", ADMIN, fm, {"outcome": "interested", "remarks": "E2E spoke about DV batch and fee", "next_action": "E2E share fee PDF", "next_date": str(TODAY + dt.timedelta(days=2)), "next_time": "11:00"})
+check("follow-up completed", "saved=" in (loc or ""), loc)
+_, _, html = get(f"/leads?id={bid}", ADMIN)
+t = text(html)
+check("lead moved to Interested with conversation kept", "E2E spoke about DV batch and fee" in t and "Interested" in t and "E2E share fee PDF" in t)
+_, _, html = get("/leads?tab=followups", ADMIN)
+check("next action becomes an open follow-up task", "E2E share fee PDF" in html)
+_, _, html = get("/leads?tab=report", ADMIN)
+row = next((r for r in re.findall(r"<tr[\s\S]*?</tr>", html) if "Sowmya Rao" in r), "")
+nums = [int(x) for x in re.findall(r">(\d+)<", row)]
+tot = [int(x) for x in re.findall(r">(\d+)<", next((r for r in re.findall(r"<tr[\s\S]*?</tr>", html) if ">Total<" in r), ""))]
+check("daily report: Sowmya's allocations counted", len(nums) >= 9 and nums[0] >= 2, str(nums))
+check("daily report: connected and interested counted", len(tot) >= 9 and tot[3] >= 1 and tot[5] >= 1, str(tot))
+check("detailed activity register lists the follow-up", "E2E spoke about DV batch and fee" in html)
+s, h, raw = http("GET", f"/api/export/lead-report?date={TODAY}", ADMIN)
+check("daily report exports to CSV", s == 200 and b"Daily Lead Management Report" in raw and b"Sowmya Rao" in raw)
+s, _, _ = http("GET", "/api/export/lead-report", STU)
+check("students can't export the lead report", s == 403)
+s, _, _ = http("GET", "/api/export/leads", ADMIN)
+check("admins can export leads", s == 200)
+
+# task completion is separate from lead closure
+_, _, html = get("/leads?tab=workspace&as=Sowmya%20Rao", ADMIN)
+i = html.index("E2E share fee PDF")
+fm = next(x for x in forms_of(html) if x["start"] > i and "remarks" in x["names"] and any("Done" in b["text"] for b in x["buttons"]))
+s, loc, _ = submit("/leads", ADMIN, fm, {"remarks": "E2E PDF sent"}, button="Done")
+check("task completed from the workspace", "saved=" in (loc or ""), loc)
+check("lead stays open after its task is done", "Interested" in text(get(f"/leads?id={bid}", ADMIN)[2]) and "E2E share fee PDF" not in get("/leads?tab=followups", ADMIN)[2])
+
+# allocate an entire stage (round-robin)
+_, _, html = get("/leads?tab=allocation&stage=non_connected", ADMIN)
+fm = find_form(html, must=["stage", "to"], button="Allocate stage")
+s, loc, _ = submit("/leads", ADMIN, fm, {"stage": "non_connected", "to": "__round_robin", "only_unassigned": None})
+check("entire stage allocated round-robin", "saved=" in (loc or "") and "round-robin" in urllib.parse.unquote(loc or ""), loc)
+
+# duplicates: admin may save one anyway, then merge it (archived, history kept), then restore
+_, _, html = get("/leads", ADMIN)
+f = find_form(html, must=["full_name", "source"])
+s, loc, _ = submit("/leads", ADMIN, f, {"full_name": "E2E Second Copy", "phone": "9444400002", "source": "WhatsApp", "allow_duplicate": "on"})
+check("admin can knowingly save a duplicate", "id=" in (loc or ""), loc)
+_, _, html = get("/leads?tab=duplicates", ADMIN)
+check("duplicate group listed", "9444400002" in html and "E2E Second Copy" in html)
+fm = next(x for x in forms_of(html) if any("Merge" in b["text"] for b in x["buttons"]) and x["start"] > html.index("9444400002"))
+s, loc, _ = submit("/leads", ADMIN, fm, button="Merge")
+check("duplicate merged into the original", "saved=" in (loc or ""), loc)
+_, _, html = get("/leads?tab=archive", ADMIN)
+check("merged duplicate archived with a link to the original", "E2E Second Copy" in html and "Duplicate of" in text(html))
+fm = next(x for x in forms_of(html) if any("Restore" in b["text"] for b in x["buttons"]) and x["start"] > html.index("E2E Second Copy"))
+s, loc, _ = submit("/leads", ADMIN, fm, button="Restore")
+check("archived lead restored", "saved=" in (loc or "") and "E2E Second Copy" in get("/leads?tab=all", ADMIN)[2])
+
+# counsellors: mark Imran as counsellor → can receive leads
+_, _, html = get("/leads?tab=counsellors", ADMIN)
+i = html.index('text-navy">Imran Sheikh')
+fm = next(x for x in forms_of(html) if x["start"] > i and "lead_capacity" in x["names"])
+s, loc, _ = submit("/leads", ADMIN, fm, {"counsellor": "on", "active": "on", "lead_capacity": "25"})
+check("counsellor settings saved", "saved=" in (loc or ""), loc)
+check("new counsellor available for allocation", '<option value="Imran Sheikh">' in get("/leads?tab=allocation", ADMIN)[2])
+
+# automatic daily report (hourly job, after the configured time, once a day)
+_, _, html = get("/leads?tab=report", ADMIN)
+fm = find_form(html, must=["report_time", "report_email"])
+s, loc, _ = submit("/leads", ADMIN, fm, {"report_time": "25:00", "report_email": ""})
+check("invalid report time refused", "error=" in (loc or ""), loc)
+s, loc, _ = submit("/leads", ADMIN, fm, {"report_time": "00:00", "report_email": "superadmin@example.com"})
+check("report time saved", "saved=" in (loc or ""), loc)
+s, _, raw = http("POST", "/api/cron/reminders", "", headers={"authorization": "Bearer e2e-secret"})
+first = json.loads(raw).get("leads", {})
+s, _, raw = http("POST", "/api/cron/reminders", "", headers={"authorization": "Bearer e2e-secret"})
+second = json.loads(raw).get("leads", {})
+check("daily lead report generated automatically, once a day", first.get("report") == "generated" and second.get("report") == "already sent", f"{first} {second}")
+check("saved report listed", str(TODAY) in get("/leads?tab=report", ADMIN)[2])
+check("admissions tab offers conversion", "/students/new?lead=" in get("/leads?tab=admissions", ADMIN)[2])
 
 passed = sum(1 for r in results if r[1])
 print(f"\n{passed}/{len(results)} checks passed")

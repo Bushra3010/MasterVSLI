@@ -25,8 +25,8 @@ import type {
 /** Tables the generic save/remove actions may touch, and the columns each accepts. */
 export const EDITABLE: Partial<Record<TableName, string[]>> = {
   branches: ["name", "city", "domain", "company"],
-  colleges: ["code", "name", "city", "state", "affiliation", "college_type", "since", "status"],
-  tpo_contacts: ["college_id", "name", "designation", "phone", "alt_phone", "email", "is_primary", "active", "remarks", "next_follow_up", "last_interaction"],
+  colleges: ["code", "name", "city", "state", "affiliation", "college_type", "since", "status", "student_strength", "target_students", "departments", "website"],
+  tpo_contacts: ["college_id", "name", "designation", "phone", "alt_phone", "email", "is_primary", "active", "remarks", "next_follow_up", "last_interaction", "department", "call_status"],
   mous: ["college_id", "mou_no", "agreement_type", "start_date", "end_date", "scope", "status", "document_url"],
   campus_drives: ["college_id", "company", "job_role", "drive_date", "mode", "eligibility", "package", "registered", "attended", "shortlisted", "selected", "status"],
   clients: ["name", "contact_person", "email", "phone", "gstin", "kind", "city", "state"],
@@ -42,8 +42,17 @@ export const EDITABLE: Partial<Record<TableName, string[]>> = {
   alert_contacts: ["role_name", "name", "email", "phone"],
   project_milestones: ["project_id", "title", "due_date", "done", "done_on"],
   staff_appraisals: ["staff_id", "period", "rating", "increment_pct", "comments"],
+  // College Management 360°
+  college_references: ["college_id", "student_id", "person_name", "person_type", "department", "batch", "reference_to", "phone", "notes"],
+  college_opportunities: ["college_id", "kind", "title", "students", "value", "expected_date", "status", "owner", "notes"],
+  college_events: ["college_id", "kind", "title", "event_date", "speaker", "attendees", "leads_generated", "status", "notes"],
+  college_feedback: ["college_id", "given_by", "rating", "comments", "on_date"],
+  college_finance: ["college_id", "description", "amount", "kind", "due_date", "paid_on", "reference"],
+  college_documents: ["college_id", "title", "kind", "url"],
 };
-const NUMERIC = new Set(["registered", "attended", "shortlisted", "selected", "hourly_rate", "hours", "seq", "total_videos", "marks", "max_marks", "rating", "increment_pct"]);
+const NUMERIC = new Set(["registered", "attended", "shortlisted", "selected", "hourly_rate", "hours", "seq", "total_videos", "marks", "max_marks", "rating", "increment_pct", "student_strength", "target_students", "students", "value", "attendees", "leads_generated", "amount"]);
+/** Counts that are never empty: a blank field means 0. */
+const ZERO = new Set(["student_strength", "target_students", "students", "value", "attendees", "leads_generated"]);
 const BOOL = new Set(["is_primary", "active", "done"]);
 
 /** SLA (hours) and escalation chain per alert kind. */
@@ -76,6 +85,7 @@ export function createCrmRepo(db: Store) {
         }
         const v = values[c];
         if (BOOL.has(c)) row[c] = v === true || v === "on" || v === "true";
+        else if ((v === "" || v === undefined) && ZERO.has(c)) row[c] = 0;
         else if (v === "" || v === undefined) row[c] = null;
         else row[c] = NUMERIC.has(c) ? Number(v) : v;
       }

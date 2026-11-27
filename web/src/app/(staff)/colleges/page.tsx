@@ -1,4 +1,4 @@
-import { Briefcase, Building2, CalendarDays, FileText, GraduationCap, Handshake, Mail, MessageCircle, Phone, Plus, Trophy, Users } from "lucide-react";
+import { FileText, Mail, MessageCircle, Phone, Plus, Trophy } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { I, Save } from "@/components/form-bits";
@@ -6,13 +6,27 @@ import { Badge, Card, Empty, Field, PageHeader, Stat } from "@/components/ui";
 import { daysBetween, fmtDate, todayISO } from "@/lib/format";
 import { waNumber } from "@/lib/messaging";
 import { getRepo } from "@/lib/server";
-import type { CampusDrive, College, Mou, TpoContact, TpoInteraction } from "@/lib/types";
+import { nowMs } from "@/lib/calendar";
+import { createCollegeRepo } from "@/lib/colleges";
+import { getStore, isAdmin, requireStaff } from "@/lib/session";
+import type { CampusDrive, College, CollegeDocument, CollegeEvent, CollegeFeedback, CollegeFinance, CollegeOpportunity, CollegeReference, CollegeSubmission, Lead, Letter, Mou, StudentApplication, TpoContact, TpoInteraction } from "@/lib/types";
+import { College360, COLLEGE_TABS, type CCtx } from "./tabs";
+import { collegeStageLabel } from "@/lib/types";
+import { allocateCollegesAction, setContactStatusAction } from "./actions";
 import { CollegeLoginButton } from "./college-login";
+import { Flash } from "@/components/student360";
 import { deleteRowAction, saveRowAction, uploadMouAction } from "../crm-actions";
 
 export const metadata = { title: "College management" };
 
-const TABS = [["master", "College Master"], ["tpo", "TPO Contacts"], ["mou", "MoU & Agreements"], ["drives", "Campus Drives"], ["portal", "College Student Portal"]];
+const TABS: [string, string][] = [
+  ["dashboard", "Dashboard"], ["colleges", "Colleges"], ["pipeline", "Pipeline"], ["contacts", "Contacts"], ["students", "Students & Alumni"], ["references", "References"],
+  ["incoming", "Incoming Leads"], ["targets", "Target Planning"], ["opportunities", "Opportunities"], ["mou", "MoU"], ["seminars", "Seminars"], ["student-leads", "Student Leads"],
+  ["admissions", "Admissions"], ["training", "Training"], ["attendance", "Attendance"], ["internships", "Internships"], ["placements", "Placements"], ["finance", "Finance"],
+  ["documents", "Documents"], ["portal", "College Portal"], ["staff-reports", "Staff Reports"], ["reminders", "Reminders"], ["feedback", "Feedback"], ["settings", "Settings"],
+];
+/** Older links used these tab names. */
+const ALIAS: Record<string, string> = { master: "colleges", tpo: "contacts", drives: "placements" };
 const mouTone = (s: string, end?: string | null) => {
   if (s === "expired" || (end && end < todayISO())) return ["red", "Expired"] as const;
   if (s === "active" && end && daysBetween(todayISO(), end) <= 90) return ["amber", "Expiring"] as const;
@@ -22,7 +36,9 @@ const driveTone = (s: string) => (s === "completed" ? "green" : s === "ongoing" 
 
 export default async function CollegesPage({ searchParams }: PageProps<"/colleges">) {
   const sp = await searchParams;
-  const tab = typeof sp.tab === "string" ? sp.tab : "master";
+  const raw = typeof sp.tab === "string" ? ALIAS[sp.tab] ?? sp.tab : "dashboard";
+  const tab = TABS.some(([k]) => k === raw) ? raw : "dashboard";
+  const session = await requireStaff();
   const q = typeof sp.q === "string" ? sp.q.trim().toLowerCase() : "";
   const repo = await getRepo();
   const interactions = await repo.list<TpoInteraction>("tpo_interactions", { order: { column: "on_date", ascending: false } });
@@ -31,12 +47,32 @@ export default async function CollegesPage({ searchParams }: PageProps<"/college
     repo.list<TpoContact>("tpo_contacts", { order: { column: "name" } }),
     repo.list<Mou>("mous", { order: { column: "start_date", ascending: false } }),
     repo.list<CampusDrive>("campus_drives", { order: { column: "drive_date", ascending: false } }),
-    repo.students(),
+    repo.students({ status: "all" }),
   ]);
+  const db = await getStore();
+  const me = (await repo.staffForUser(session.userId, session.email))?.full_name ?? session.name;
+  const [acts, subs, refs, opps, events, feedback, finance, docs, staff, courses, leads, letters, applications] = await Promise.all([
+    createCollegeRepo(db).activities(),
+    db.select<CollegeSubmission>("college_submissions", { order: { column: "created_at", ascending: false } }),
+    db.select<CollegeReference>("college_references", { order: { column: "created_at", ascending: false } }),
+    db.select<CollegeOpportunity>("college_opportunities", { order: { column: "created_at", ascending: false } }),
+    db.select<CollegeEvent>("college_events", { order: { column: "event_date", ascending: false } }),
+    db.select<CollegeFeedback>("college_feedback", { order: { column: "on_date", ascending: false } }),
+    db.select<CollegeFinance>("college_finance", { order: { column: "created_at", ascending: false } }),
+    db.select<CollegeDocument>("college_documents", { order: { column: "created_at", ascending: false } }),
+    repo.staff(),
+    repo.courses(),
+    db.select<Lead>("leads", { order: { column: "created_at", ascending: false } }),
+    db.select<Letter>("issued_letters"),
+    db.select<StudentApplication>("student_applications"),
+  ]);
+  const ctx: CCtx = {
+    sp, admin: isAdmin(session), me, now: nowMs(), today: todayISO(), colleges, tpos, mous, drives, students, leads: leads.filter((l) => !l.archived),
+    acts, subs, refs, opps, events, feedback, finance, docs, staff, courses, letters, applications,
+  };
   const cname = new Map(colleges.map((c) => [c.id, c.name]));
   const sel = colleges.find((c) => c.id === sp.id) ?? colleges[0];
   const studentsOf = (id: string) => students.filter((s) => s.college_id === id);
-  const activeMous = mous.filter((m) => mouTone(m.status, m.end_date)[1] !== "Expired" && m.status === "active");
   const collegeSel = (v?: string) => (
     <select name="college_id" defaultValue={v ?? sel?.id} required aria-label="College" className="input w-auto py-1.5">
       {colleges.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -45,28 +81,21 @@ export default async function CollegesPage({ searchParams }: PageProps<"/college
 
   return (
     <>
-      <PageHeader title="College Management" subtitle="Manage college partnerships, TPO contacts, MoUs, campus drives and college student reporting." />
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <Stat label="Partner colleges" value={colleges.filter((c) => c.status === "partner").length} icon={<Building2 size={18} />} />
-        <Stat label="Active MoUs" value={activeMous.length} tone="green" icon={<Handshake size={18} />} />
-        <Stat label="Students registered" value={students.filter((s) => s.college_id).length} tone="blue" icon={<Users size={18} />} />
-        <Stat label="Students trained" value={students.filter((s) => s.college_id && s.status === "completed").length + drives.reduce((a, d) => a + d.attended, 0)} tone="amber" icon={<GraduationCap size={18} />} />
-        <Stat label="Placements" value={drives.reduce((a, d) => a + d.selected, 0)} tone="green" icon={<Briefcase size={18} />} />
-        <Stat label="Campus drives" value={drives.length} tone="red" icon={<CalendarDays size={18} />} />
-      </div>
-
-      <nav className="my-4 flex flex-wrap gap-4 border-b border-line text-[13px]">
+      <PageHeader title="College Management 360°" subtitle="Colleges, pipeline, contacts, students & alumni, references, incoming data, targets, MoUs, seminars, admissions, placements and staff reports in one place." />
+      <Flash sp={sp} />
+      <nav className="mb-4 grid grid-cols-2 gap-1 rounded-[5px] border border-line bg-white p-1.5 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8" aria-label="College management sections">
         {TABS.map(([k, l]) => (
-          <Link key={k} href={`/colleges?tab=${k}${sel ? `&id=${sel.id}` : ""}`} className={`-mb-px border-b-2 pb-2 ${tab === k ? "border-brand font-medium text-brand" : "border-transparent text-muted hover:text-brand"}`}>{l}</Link>
+          <Link key={k} href={`/colleges?tab=${k}`} className={`rounded-[5px] px-2.5 py-1.5 text-[13px] ${tab === k ? "bg-brand font-medium text-white" : "bg-slate-50 text-navy hover:bg-slate-100"}`}>{l}</Link>
         ))}
       </nav>
+      {COLLEGE_TABS[tab] && COLLEGE_TABS[tab](ctx)}
 
-      {tab === "master" && (
+      {tab === "colleges" && (
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
           <Card title={`College Master (${colleges.length})`} bodyClass="p-0 overflow-x-auto">
             <form className="flex gap-2 border-b border-line p-3"><input type="hidden" name="tab" value="master" /><input name="q" defaultValue={q} placeholder="Search college (name / location / code)" aria-label="Search colleges" className="input" /></form>
             <table className="table">
-              <thead><tr><th>#</th><th>College</th><th>Location</th><th>MoU</th><th>Students</th><th>Status</th></tr></thead>
+              <thead><tr><th>#</th><th>College</th><th>Location</th><th>Stage</th><th>Staff</th><th>MoU</th><th>Students</th><th>Status</th></tr></thead>
               <tbody>
                 {colleges.filter((c) => !q || [c.name, c.city, c.code].some((v) => v?.toLowerCase().includes(q))).map((c, k) => {
                   const m = mous.find((x) => x.college_id === c.id);
@@ -76,6 +105,8 @@ export default async function CollegesPage({ searchParams }: PageProps<"/college
                       <td>{k + 1}</td>
                       <td><Link href={`/colleges?tab=master&id=${c.id}`} className="font-medium text-navy hover:text-brand">{c.name}</Link></td>
                       <td>{[c.city, c.state].filter(Boolean).join(", ")}</td>
+                      <td className="text-xs">{collegeStageLabel(c.stage ?? (c.status === "partner" ? "mou_signed" : "new"))}</td>
+                      <td className="text-xs">{c.assigned_to ?? <span className="text-amber-700">—</span>}</td>
                       <td><Badge tone={tone}>{label}</Badge></td>
                       <td>{studentsOf(c.id).length}</td>
                       <td><Badge tone={c.status === "partner" ? "green" : "slate"}>{c.status}</Badge></td>
@@ -84,6 +115,15 @@ export default async function CollegesPage({ searchParams }: PageProps<"/college
                 })}
               </tbody>
             </table>
+            {ctx.admin && (
+              <details id="allocate" className="border-t border-line p-3">
+                <summary className="cursor-pointer text-sm font-medium text-brand">Allocate colleges to staff</summary>
+                <form action={allocateCollegesAction} className="mt-2 space-y-2 text-xs">
+                  <div className="grid max-h-48 grid-cols-2 gap-1 overflow-y-auto">{colleges.map((c) => <label key={c.id} className="flex items-center gap-1.5"><input type="checkbox" name="ids" value={c.id} defaultChecked={!c.assigned_to} /> {c.name} <span className="text-muted">({c.assigned_to ?? "unassigned"})</span></label>)}</div>
+                  <div className="flex gap-2"><select name="to" required aria-label="Staff" className="input py-1.5"><option value="">Allocate to…</option>{staff.filter((x) => x.active !== false).map((x) => <option key={x.id}>{x.full_name}</option>)}</select><button className="btn-primary">Allocate</button></div>
+                </form>
+              </details>
+            )}
             <details className="border-t border-line p-3">
               <summary className="cursor-pointer text-sm font-medium text-brand"><Plus size={14} className="inline" /> Add college</summary>
               <CollegeForm />
@@ -106,6 +146,7 @@ export default async function CollegesPage({ searchParams }: PageProps<"/college
                 </div>
                 <details><summary className="btn-ghost cursor-pointer text-xs">Edit college</summary><div className="mt-2 w-80"><CollegeForm c={sel} /></div></details>
               </div>
+              <College360 c={ctx} x={sel} />
               <div className="grid gap-4 lg:grid-cols-2">
                 <Card title="College Summary">
                   <dl>
@@ -147,19 +188,26 @@ export default async function CollegesPage({ searchParams }: PageProps<"/college
         </div>
       )}
 
-      {tab === "tpo" && (
+      {tab === "contacts" && (
         <Card title={`TPO Contacts (${tpos.length})`} bodyClass="p-0 overflow-x-auto">
           <table className="table">
-            <thead><tr><th>#</th><th>TPO name</th><th>Designation</th><th>College</th><th>Phone</th><th>Email</th><th>Next follow-up</th><th>Status</th><th /></tr></thead>
+            <thead><tr><th>#</th><th>Contact</th><th>Designation · dept</th><th>College</th><th>Phone</th><th>Email</th><th>Call status</th><th>Next follow-up</th><th>Status</th><th /></tr></thead>
             <tbody>
               {tpos.map((t, k) => (
                 <tr key={t.id}>
                   <td>{k + 1}</td>
                   <td className="font-medium">{t.name}{t.is_primary && <Badge tone="green">Primary</Badge>}</td>
-                  <td className="text-xs">{t.designation}</td>
+                  <td className="text-xs">{t.designation}{t.department ? ` · ${t.department}` : ""}</td>
                   <td>{cname.get(t.college_id)}</td>
-                  <td>{t.phone}</td>
+                  <td>{t.phone ?? <Badge tone="red">Missing</Badge>}</td>
                   <td className="text-xs">{t.email}</td>
+                  <td className="whitespace-nowrap text-xs">
+                    <Badge tone={t.call_status === "connected" ? "green" : t.call_status === "non_connected" ? "red" : "slate"}>{t.call_status === "connected" ? "Connected" : t.call_status === "non_connected" ? "Not connected" : "Not called"}</Badge>
+                    <div className="mt-1 flex gap-1">
+                      <form action={setContactStatusAction.bind(null, t.id, "connected")}><button className="rounded border border-emerald-300 px-1.5 text-[11px] text-emerald-700">Connected</button></form>
+                      <form action={setContactStatusAction.bind(null, t.id, "non_connected")}><button className="rounded border border-red-200 px-1.5 text-[11px] text-red-700">No answer</button></form>
+                    </div>
+                  </td>
                   <td className="text-xs">{t.next_follow_up ? fmtDate(t.next_follow_up) : "—"}</td>
                   <td><Badge tone={t.active ? "green" : "slate"}>{t.active ? "Active" : "Inactive"}</Badge></td>
                   <td className="whitespace-nowrap">
@@ -175,6 +223,7 @@ export default async function CollegesPage({ searchParams }: PageProps<"/college
             {collegeSel()}
             <I name="name" required placeholder="TPO name" w="w-40" />
             <I name="designation" placeholder="Designation" w="w-44" />
+            <I name="department" placeholder="Department" w="w-28" />
             <I name="phone" placeholder="Phone" w="w-32" />
             <I name="email" type="email" placeholder="Email" w="w-44" />
             <I name="next_follow_up" type="date" placeholder="Next follow-up" w="w-36" />
@@ -185,7 +234,7 @@ export default async function CollegesPage({ searchParams }: PageProps<"/college
         </Card>
       )}
 
-      {tab === "tpo" && (() => {
+      {tab === "contacts" && (() => {
         const t = tpos.find((x) => x.id === sp.tpo) ?? tpos[0];
         if (!t) return null;
         const hist = interactions.filter((i) => i.tpo_id === t.id);
@@ -252,7 +301,7 @@ export default async function CollegesPage({ searchParams }: PageProps<"/college
         </Card>
       )}
 
-      {tab === "drives" && (
+      {tab === "placements" && (
         <>
           <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
             <Stat label="Total drives" value={drives.length} />

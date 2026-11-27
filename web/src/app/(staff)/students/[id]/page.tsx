@@ -9,6 +9,9 @@ import { createProfileRepo } from "@/lib/profile";
 import { getSession, getStore } from "@/lib/session";
 import type { Branch } from "@/lib/types";
 import { MasterDataForm } from "./master-data";
+import { loadStudent360 } from "@/lib/student360";
+import { nowMs } from "@/lib/calendar";
+import Link from "next/link";
 import { KeyImprovements } from "@/components/key-improvements";
 import { APPLICATION_STATUSES } from "@/lib/types";
 import { addNoteAction, removeApplicationAction, saveApplicationAction, verifyProfileAction } from "../profile-actions";
@@ -26,6 +29,7 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
     prof.applications(id), prof.notes(id), s.category === "college" && s.college_id ? prof.collegeContacts(s.college_id) : Promise.resolve(undefined),
     repo.list<Branch>("branches", { order: { column: "name" } }), repo.courses(), repo.batches(), prof.options(), getSession(),
   ]);
+  const d360 = await loadStudent360(await getStore(), id, nowMs()).catch(() => null);
   const validity = s.extra?.validity_months ?? p.course?.validity_months ?? null;
   const photo = p.documents.find((d) => d.kind === "photo");
   const left = s.validity_end ? daysBetween(todayISO(), s.validity_end) : null;
@@ -65,6 +69,27 @@ export default async function StudentPage({ params, searchParams }: PageProps<"/
   return (
     <>
       {sp.saved && <div role="status" className="mb-4 rounded-[5px] border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{sp.saved === "master" ? "Master data saved." : "Profile saved."}</div>}
+      {d360 && (
+        <section className="mb-4 grid gap-3 rounded-[5px] border border-line bg-white p-3 shadow-sm md:grid-cols-[1fr_2fr]" aria-label="Student 360 summary">
+          <div>
+            <div className="text-xs font-semibold text-navy">Profile completion: {d360.completion.pct}%</div>
+            <div className="mt-1 h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-brand" style={{ width: `${d360.completion.pct}%` }} /></div>
+            {d360.completion.missing.length > 0 && <div className="mt-1 text-[11px] text-muted">Missing: {d360.completion.missing.map((m) => m.label).join(", ")}</div>}
+            <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+              <Link href="/student-desk?tab=interviews" className="text-brand underline">Schedule interview</Link>
+              <Link href="/student-desk?tab=payments" className="text-brand underline">Verify payments</Link>
+              <Link href="/student-desk?tab=requests" className="text-brand underline">Requests</Link>
+            </div>
+          </div>
+          <div>
+            <div className="text-xs font-semibold text-navy">Student reminders ({d360.actions.length})</div>
+            <ul className="mt-1 flex flex-wrap gap-1.5">
+              {d360.actions.map((a) => <li key={a.key} className={`rounded-full px-2 py-0.5 text-[11px] ${a.tone === "red" ? "bg-red-50 text-red-700" : a.tone === "amber" ? "bg-amber-50 text-amber-800" : "bg-sky-50 text-sky-800"}`} title={a.detail}>{a.title}</li>)}
+              {!d360.actions.length && <li className="text-[11px] text-emerald-700">Nothing pending</li>}
+            </ul>
+          </div>
+        </section>
+      )}
       <StudentProfileView
         p={p}
         applications={applications}

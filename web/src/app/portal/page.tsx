@@ -1,37 +1,77 @@
-import { AlertTriangle, Bell, Briefcase } from "lucide-react";
-import { noticeText } from "@/lib/notify";
-import { StudentProfileView } from "@/components/student-profile";
-import { PayNow } from "./pay-now";
-import { Badge, Card, StatusBadge } from "@/components/ui";
-import { daysBetween, fmtDate, todayISO } from "@/lib/format";
+import { AlertTriangle, Bell, Briefcase, CalendarClock, ListChecks } from "lucide-react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { noticeText } from "@/lib/notify";
+import { ProfilePhoto } from "@/components/profile-photo";
+import { ActionList, ActionStrip, Kpi } from "@/components/student360";
+import { Badge, Card, Progress, StatusBadge } from "@/components/ui";
+import { daysBetween, fmtDate, inr, istDateTime, todayISO } from "@/lib/format";
 import { getServiceRepo, getStudentReadRepo } from "@/lib/server";
 import { requireStudent } from "@/lib/session";
+import { getStudent360, isAlumni } from "@/lib/student360";
+import type { CourseModule, ModuleProgress } from "@/lib/types";
 
 export const metadata = { title: "My dashboard" };
+
+const CATEGORY: Record<string, string> = { normal: "Normal Student", college: "College Student", corporate: "Corporate Student" };
 
 export default async function PortalHome({ searchParams }: PageProps<"/portal">) {
   const sp = await searchParams;
   const s = await requireStudent();
+  const d = await getStudent360(s.studentId);
+  if (!d) return <p>Profile not found.</p>;
+  const { p, completion, actions, interviews, drives: allDrives } = d;
+  const st = p.student;
+  // After training validity ends, the Alumni Profile opens automatically until it is filled in.
+  if (isAlumni(st) && !st.extra?.alumni?.updated_at) redirect("/portal/alumni?first=1");
+
   const repo = await getStudentReadRepo();
   const svc = getServiceRepo();
-  const [p, notices, general, placement, allDrives] = await Promise.all([repo.profile(s.studentId), repo.studentNotifications(s.studentId), svc.consentFor(s.studentId, "general"), svc.consentFor(s.studentId, "placement"), svc.drives()]);
-  // Open and upcoming drives, soonest first (drives without a date last)
-  const drives = allDrives.filter((d) => d.status !== "closed" && (!d.drive_date || d.drive_date >= todayISO())).sort((a, b) => (a.drive_date ?? "9999").localeCompare(b.drive_date ?? "9999")).slice(0, 6);
-  if (!p) return <p>Profile not found.</p>;
-  const st = p.student;
-  const left = st.validity_end ? daysBetween(todayISO(), st.validity_end) : null;
+  const [notices, general, placement, mods, prog] = await Promise.all([
+    repo.studentNotifications(s.studentId),
+    svc.consentFor(s.studentId, "general"),
+    svc.consentFor(s.studentId, "placement"),
+    st.course_id ? repo.list<CourseModule>("course_modules", { eq: { course_id: st.course_id } }) : Promise.resolve([] as CourseModule[]),
+    repo.list<ModuleProgress>("module_progress", { eq: { student_id: s.studentId } }),
+  ]);
+  const totalVideos = mods.reduce((a, m) => a + Number(m.total_videos), 0);
+  const doneVideos = mods.reduce((a, m) => a + Math.min(Number(m.total_videos), Number(prog.find((x) => x.module_id === m.id)?.videos_done ?? 0)), 0);
+  const learning = totalVideos ? Math.round((doneVideos / totalVideos) * 100) : 0;
+  const today = todayISO();
+  const drives = allDrives.filter((x) => x.status !== "closed" && (!x.drive_date || x.drive_date >= today)).sort((a, b) => (a.drive_date ?? "9999").localeCompare(b.drive_date ?? "9999")).slice(0, 6);
+  const upcoming = interviews.filter((i) => i.status === "scheduled" && i.scheduled_at.slice(0, 10) >= today);
+  const missed = interviews.filter((i) => i.status === "missed");
+  const left = st.validity_end ? daysBetween(today, st.validity_end) : null;
+  const photo = p.documents.find((x) => x.kind === "photo");
+  const sections = [...new Set(completion.checks.map((c) => c.section))];
+
   return (
     <>
-      <div className="mb-5 rounded-[5px] bg-navy p-5 text-white">
-        <div className="text-sm opacity-80">Welcome back,</div>
-        <h1 className="text-2xl font-semibold">{st.full_name}</h1>
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-          <span className="font-mono opacity-90">{st.enrollment_no}</span>
-          <StatusBadge status={st.status} />
-          {left !== null && <Badge tone={left <= 30 ? "amber" : "slate"}>Access valid till {fmtDate(st.validity_end)}</Badge>}
+      <section className="mb-5 rounded-[5px] border border-line bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-start gap-4">
+          <ProfilePhoto src={photo ? `/api/documents/${photo.id}` : null} name={st.full_name} className="size-16 rounded-[6px] border border-line" />
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl font-semibold text-navy">{st.full_name}</h1>
+            <div className="text-xs text-muted"><span className="font-mono">{st.enrollment_no}</span> · {p.course?.name ?? "Course"}{p.batch ? ` · ${p.batch.name}` : ""}</div>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+              <StatusBadge status={st.status} />
+              <Badge tone="blue">{CATEGORY[st.category ?? "normal"]}</Badge>
+              {isAlumni(st) && <Badge tone="green">Alumni</Badge>}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/portal/profile" className="btn-ghost">Update profile</Link>
+            {isAlumni(st) && <Link href="/portal/alumni" className="btn-ghost">Alumni Profile</Link>}
+          </div>
         </div>
-      </div>
+        <div className="mt-3">
+          <div className="mb-1 flex justify-between text-xs"><span className="font-medium text-navy">{`Profile completion: ${completion.pct}%`}</span><span className="text-muted">{completion.done} of {completion.total} required details</span></div>
+          <Progress value={completion.pct} />
+        </div>
+        {st.validity_end && <div className="mt-2 text-[11px] text-muted">Validity: {fmtDate(st.admission_date)} to {fmtDate(st.validity_end)}</div>}
+      </section>
+      <ActionStrip items={actions} />
+
       {general.required && (
         <Link href="/portal/terms" className="mb-5 flex items-center justify-between gap-3 rounded-[5px] border border-red-200 bg-red-50 p-4 text-sm text-red-900">
           <span><b>Action needed:</b> please read and accept the MasterVLSI Terms &amp; Conditions.</span><span className="btn-primary">Review &amp; accept</span>
@@ -49,43 +89,85 @@ export default async function PortalHome({ searchParams }: PageProps<"/portal">)
           training materials are paused until the institute re-activates or renews your access.
         </div>
       )}
-      {left !== null && left >= 0 && left <= 30 && st.status === "active" && (
-        <div className="mb-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-          Your training access expires in <b>{left} days</b>. Contact the office to renew.
-        </div>
-      )}
-      {notices.length > 0 && (
-        <Card title="Notices" icon={<Bell size={15} />} className="mb-5">
-          <ul className="space-y-2 text-sm">
-            {notices.slice(0, 5).map((n) => (
-              <li key={n.id} className="flex justify-between gap-3">
-                <span>{noticeText(n.kind, st.full_name, st.validity_end).subject}</span>
-                <span className="shrink-0 text-xs text-muted">{fmtDate(n.created_at)}</span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
       {sp.paid && (
         <div className="mb-5 rounded-[5px] border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-800">
-          Thank you! Your payment is being confirmed. The receipt appears under Fee &amp; payment summary within a minute.
+          Thank you! Your payment is being confirmed. The receipt appears under Fees &amp; Payments within a minute.
         </div>
       )}
+
+      <div className="mb-1 text-[11px] text-muted">Student Management / Overview / Dashboard</div>
+      <h2 className="mb-3 text-lg font-semibold text-navy">Overview</h2>
+      <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Kpi label="Profile completion" value={`${completion.pct}%`} tone={completion.pct < 100 ? "amber" : "green"} />
+        <Kpi label="Pending activities" value={actions.length} tone={actions.length ? "red" : "green"} />
+        <Kpi label="Upcoming interviews" value={upcoming.length} />
+        <Kpi label="Missed interviews" value={missed.length} tone={missed.length ? "red" : undefined} />
+        <Kpi label="Last attendance" value={d.lastAttendance ? fmtDate(d.lastAttendance) : "—"} />
+        <Kpi label="Outstanding fee" value={inr(Math.max(0, p.fee.balance))} tone={p.fee.balance > 0 ? "amber" : "green"} />
+        <Kpi label="Learning progress" value={`${learning}%`} />
+        <Kpi label="Training expiry" value={st.validity_end ? fmtDate(st.validity_end) : "—"} tone={left !== null && left <= 30 ? "amber" : undefined} />
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
+        <Card title={`My pending activities (${actions.length})`} icon={<ListChecks size={15} />} className="scroll-mt-20" bodyClass="p-3">
+          <div id="actions" className="scroll-mt-24" />
+          <ActionList items={actions} back="/portal" />
+        </Card>
+        <div className="space-y-5">
+          <Card title="Profile completion" bodyClass="p-3">
+            <ul className="space-y-1.5 text-[13px]">
+              {sections.map((sec) => {
+                const cs = completion.checks.filter((c) => c.section === sec);
+                const ok = cs.filter((c) => c.ok).length;
+                const miss = cs.find((c) => !c.ok);
+                return (
+                  <li key={sec} className="flex items-center justify-between gap-2">
+                    <span>{sec}</span>
+                    {miss ? <Link href={miss.href} className="text-xs font-medium text-amber-700 underline">{ok}/{cs.length} · complete</Link> : <Badge tone="green">Done</Badge>}
+                  </li>
+                );
+              })}
+            </ul>
+          </Card>
+          <Card title="Upcoming interviews" icon={<CalendarClock size={15} />} actions={<Link href="/portal/interviews" className="text-xs underline">All interviews →</Link>} bodyClass="p-3">
+            {upcoming.length ? (
+              <ul className="space-y-2 text-[13px]">
+                {upcoming.slice(0, 4).map((i) => (
+                  <li key={i.id} className="flex justify-between gap-2"><span><b>{i.company}</b>{i.round ? ` · ${i.round}` : ""}</span><span className="shrink-0 text-xs text-muted">{istDateTime(i.scheduled_at)}</span></li>
+                ))}
+              </ul>
+            ) : <p className="text-sm text-muted">No interviews scheduled.</p>}
+          </Card>
+          {notices.length > 0 && (
+            <Card title="Notifications" icon={<Bell size={15} />} bodyClass="p-3">
+              <ul className="space-y-2 text-sm">
+                {notices.slice(0, 5).map((n) => (
+                  <li key={n.id} className="flex justify-between gap-3">
+                    <span>{noticeText(n.kind, st.full_name, st.validity_end).subject}</span>
+                    <span className="shrink-0 text-xs text-muted">{fmtDate(n.created_at)}</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+        </div>
+      </div>
+
       {drives.length > 0 && (
-        <Card title="Upcoming company drives" icon={<Briefcase size={15} />} className="mb-5" bodyClass="p-0 overflow-x-auto" actions={<Link href="/portal/drives" className="text-xs underline">Respond to drives →</Link>}>
+        <Card title="Upcoming company drives" icon={<Briefcase size={15} />} className="mt-5" bodyClass="p-0 overflow-x-auto" actions={<Link href="/portal/drives" className="text-xs underline">Respond to drives →</Link>}>
           <table className="table">
             <thead><tr><th>Date</th><th>Company</th><th>Role</th><th>Location · mode</th><th>Status</th><th>My answer</th></tr></thead>
             <tbody>
-              {drives.map((d) => {
-                const mine = p.responses.find((r) => r.drive_id === d.id);
+              {drives.map((x) => {
+                const mine = p.responses.find((r) => r.drive_id === x.id);
                 return (
-                  <tr key={d.id}>
-                    <td className="whitespace-nowrap">{d.drive_date ? fmtDate(d.drive_date) : "Date TBA"}{d.drive_date && <div className="text-[11px] text-muted">in {daysBetween(todayISO(), d.drive_date)} days</div>}</td>
-                    <td className="font-medium">{d.company}</td>
-                    <td>{d.job_role}{d.ctc && <div className="text-[11px] text-muted">CTC {d.ctc}</div>}</td>
-                    <td className="text-xs">{[d.location, d.interview_mode].filter(Boolean).join(" · ") || "—"}</td>
-                    <td><StatusBadge status={d.status} /></td>
-                    <td>{mine ? <StatusBadge status={mine.response} /> : d.status === "open" ? <Link href="/portal/drives" className="text-xs font-medium text-navy underline">Answer now</Link> : <span className="text-xs text-muted">Opens soon</span>}</td>
+                  <tr key={x.id}>
+                    <td className="whitespace-nowrap">{x.drive_date ? fmtDate(x.drive_date) : "Date TBA"}{x.drive_date && <div className="text-[11px] text-muted">in {daysBetween(today, x.drive_date)} days</div>}</td>
+                    <td className="font-medium">{x.company}</td>
+                    <td>{x.job_role}{x.ctc && <div className="text-[11px] text-muted">CTC {x.ctc}</div>}</td>
+                    <td className="text-xs">{[x.location, x.interview_mode].filter(Boolean).join(" · ") || "—"}</td>
+                    <td><StatusBadge status={x.status} /></td>
+                    <td>{mine && mine.response !== "pending" ? <StatusBadge status={mine.response} /> : x.status === "open" ? <Link href="/portal/drives" className="text-xs font-medium text-navy underline">Answer now</Link> : <span className="text-xs text-muted">Opens soon</span>}</td>
                   </tr>
                 );
               })}
@@ -93,7 +175,6 @@ export default async function PortalHome({ searchParams }: PageProps<"/portal">)
           </table>
         </Card>
       )}
-      <StudentProfileView p={p} receiptBase="/portal/receipt/" paymentControl={(id) => <PayNow installmentId={id} />} />
     </>
   );
 }

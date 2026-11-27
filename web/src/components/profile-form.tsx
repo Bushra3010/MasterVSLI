@@ -81,6 +81,8 @@ export function ProfileForm({
   const pr = s.professional ?? {};
   const [sameAddress, setSameAddress] = useState(x.current_same ?? true);
   const [category, setCategory] = useState(s.category ?? "normal");
+  const [gender, setGender] = useState(s.gender ?? "");
+  const [marital, setMarital] = useState(s.marital_status ?? "");
   const [courseId, setCourseId] = useState(s.course_id ?? "");
   const course = courses.find((c) => c.id === courseId);
   const [months, setMonths] = useState(String(course?.validity_months ?? ""));
@@ -101,8 +103,8 @@ export function ProfileForm({
         <Grid cols={3}>
           <F label="Full name *" name="full_name" value={s.full_name} required />
           <F label="Date of birth" name="dob" type="date" value={s.dob} />
-          <S label="Gender" name="gender" value={s.gender} options={["Female", "Male", "Other"]} />
-          <S label="Marital status" name="marital_status" value={s.marital_status} options={["Single", "Married", "Other"]} />
+          <S label="Gender" name="gender" value={s.gender} options={["Female", "Male", "Other"]} onChange={setGender} />
+          <S label="Marital status" name="marital_status" value={s.marital_status} options={["Single", "Married", "Other"]} onChange={setMarital} />
           <S label="Blood group" name="blood_group" value={s.blood_group} options={["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]} />
           <F label="Nationality" name="nationality" value={s.nationality ?? "Indian"} />
           <F label="Languages (comma separated)" name="languages" value={s.languages?.join(", ")} />
@@ -202,14 +204,16 @@ export function ProfileForm({
             <S label="Relation" name="emergency.relation" value={s.emergency?.relation} options={["Father", "Mother", "Spouse", "Brother", "Sister", "Guardian", "Friend", "Other"]} />
           </Grid>
         </div>
-        <div className="mt-4 border-t border-line pt-3">
-          <div className="mb-2 text-xs font-semibold text-muted uppercase">Spouse (if married)</div>
-          <Grid cols={3}>
-            <F label="Spouse name" name="spouse.name" value={s.spouse?.name} />
-            <F label="Occupation" name="spouse.occupation" value={s.spouse?.occupation} />
-            <F label="Spouse mobile" name="spouse.phone" value={s.spouse?.phone} />
-          </Grid>
-        </div>
+        {gender === "Female" && marital === "Married" && (
+          <div className="mt-4 border-t border-line pt-3">
+            <div className="mb-2 text-xs font-semibold text-muted uppercase">Husband details</div>
+            <Grid cols={3}>
+              <F label="Husband's name" name="spouse.name" value={s.spouse?.name} />
+              <F label="Occupation" name="spouse.occupation" value={s.spouse?.occupation} />
+              <F label="Husband's mobile" name="spouse.phone" value={s.spouse?.phone} />
+            </Grid>
+          </div>
+        )}
       </Section>
 
       <Section id="education" title="Educational details">
@@ -234,6 +238,32 @@ export function ProfileForm({
           })}
         </div>
       </Section>
+
+      {category === "college" && (
+        <Section id="college-info" title="College details">
+          <Grid cols={3}>
+            <F label="University roll number" name="ci.roll_no" value={x.college_info?.roll_no} />
+            <F label="Department" name="ci.department" value={x.college_info?.department} />
+            <F label="HOD name" name="ci.hod" value={x.college_info?.hod} />
+            <F label="TPO name" name="ci.tpo" value={x.college_info?.tpo} />
+            <F label="Faculty coordinator" name="ci.faculty" value={x.college_info?.faculty} />
+          </Grid>
+        </Section>
+      )}
+
+      {category === "corporate" && (
+        <Section id="corporate" title="Corporate details">
+          <Grid cols={3}>
+            <F label="Employee ID" name="co.employee_id" value={x.corporate?.employee_id} />
+            <F label="Department" name="co.department" value={x.corporate?.department} />
+            <F label="HR name" name="co.hr_name" value={x.corporate?.hr_name} />
+            <F label="HR contact" name="co.hr_contact" value={x.corporate?.hr_contact} />
+            <F label="Reporting manager" name="co.manager_name" value={x.corporate?.manager_name} />
+            <F label="Manager contact" name="co.manager_contact" value={x.corporate?.manager_contact} />
+            {staff && <F label="Corporate billing (office only)" name="co.billing" value={x.corporate?.billing} wide />}
+          </Grid>
+        </Section>
+      )}
 
       {staff && category === "college" && (
         <Section id="college" title="College details — key contacts" note="Saved to the college in College Management">
@@ -298,6 +328,18 @@ export function ProfileForm({
           <S label="Interview mode" name="pro.interview_mode" value={pr.interview_mode} options={["Online", "Offline", "Both"]} />
         </Grid>
         <div className="mt-3"><C label="Willing to relocate" name="pro.relocate" checked={pr.relocate} /></div>
+        <div className="mt-4 border-t border-line pt-3">
+          <div className="mb-2 text-xs font-semibold text-muted uppercase">Career gap &amp; objective</div>
+          <Grid cols={4}>
+            <F label="Gap from" name="gap.from" type="month" value={x.career_gap?.from} />
+            <F label="Gap to" name="gap.to" type="month" value={x.career_gap?.to} />
+            <F label="Reason for gap" name="gap.reason" value={x.career_gap?.reason} wide />
+          </Grid>
+          <div className="mt-3">
+            <label className="label" htmlFor="career_objective">Career objective</label>
+            <textarea id="career_objective" name="career_objective" rows={2} defaultValue={x.career_objective ?? ""} placeholder="e.g. Become a Design Verification engineer at a product semiconductor company" className="input" />
+          </div>
+        </div>
         {staff && (
           <div className="mt-4 border-t border-line pt-3">
             <div className="mb-2 text-xs font-semibold text-muted uppercase">(B) After joining MasterVLSI — placement</div>
