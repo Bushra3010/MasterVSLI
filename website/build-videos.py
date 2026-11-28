@@ -9,7 +9,7 @@ import os
 import re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PUBLIC = os.path.join(HERE, "public")
+PUBLIC = os.path.join(HERE, "src")
 data = json.load(open(os.path.join(HERE, "videos.json"), encoding="utf-8"))
 VIDEOS = data["videos"]
 CHANNEL = data["channel"]

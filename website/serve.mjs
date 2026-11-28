@@ -4,9 +4,9 @@ import { readFile, stat } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const root = join(fileURLToPath(new URL(".", import.meta.url)), "public");
+const root = join(fileURLToPath(new URL(".", import.meta.url)), process.env.SITE_DIR || "dist");
 const port = Number(process.env.PORT || process.argv[2] || 4321);
-const TYPES = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".png": "image/png", ".jpg": "image/jpeg", ".ico": "image/x-icon", ".woff2": "font/woff2", ".svg": "image/svg+xml" };
+const TYPES = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".png": "image/png", ".jpg": "image/jpeg", ".ico": "image/x-icon", ".woff2": "font/woff2", ".svg": "image/svg+xml", ".webp": "image/webp" };
 
 async function file(p) {
   try { return (await stat(p)).isFile() ? p : null; } catch { return null; }

@@ -105,4 +105,20 @@
     btn.removeAttribute("hidden");
     btn.addEventListener("click", function () { list.classList.add("show-all"); btn.remove(); });
   });
+
+  // Faster page changes: start fetching an internal page as soon as the visitor hovers or touches its link.
+  var prefetched = {};
+  function prefetch(e) {
+    var a = e.target.closest && e.target.closest("a[href^='/']");
+    if (!a || a.target === "_blank" || /\.(jpg|png|webp|pdf)/.test(a.getAttribute("href"))) return;
+    var url = a.getAttribute("href").split("#")[0];
+    if (!url || url === location.pathname || prefetched[url]) return;
+    prefetched[url] = true;
+    var l = document.createElement("link");
+    l.rel = "prefetch";
+    l.href = url;
+    document.head.appendChild(l);
+  }
+  document.addEventListener("mouseover", prefetch, { passive: true });
+  document.addEventListener("touchstart", prefetch, { passive: true });
 })();
