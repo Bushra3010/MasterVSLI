@@ -1,14 +1,18 @@
 import { NextResponse } from "next/server";
 import { istDate } from "@/lib/format";
 import { hmacHex, safeEqual } from "@/lib/integrations/crypto";
+import { attendanceMeetings, norm } from "@/lib/integrations/zoom";
 import { getServiceRepo } from "@/lib/server";
 
 /**
  * Zoom → attendance. Subscribe your Zoom app to:
  *   meeting.participant_joined, meeting.participant_left
  * Endpoint: https://<app>/api/webhooks/zoom   Secret: ZOOM_WEBHOOK_SECRET
- * Participants are matched by email against student_access(zoom).external_ref, then students.email.
+ * Only meetings whose topic is in ZOOM_ATTENDANCE_MEETINGS count (comma-separated; default "Regular Meeting").
+ * Participants are matched by email (student_access(zoom).external_ref, then students.email), then by an enrollment
+ * number in their Zoom display name (e.g. "MVL2026001 Rahul"), then by an exact, unique full name.
  */
+
 export async function POST(req: Request) {
   const secret = process.env.ZOOM_WEBHOOK_SECRET;
   const raw = await req.text();
@@ -32,13 +36,21 @@ export async function POST(req: Request) {
   if (!["meeting.participant_joined", "meeting.participant_left"].includes(body.event)) return NextResponse.json({ ignored: body.event });
 
   const obj = body.payload?.object ?? {};
+  // Attendance is taken only from the class meeting(s), e.g. "Regular Meeting".
+  if (!attendanceMeetings().includes(norm(obj.topic))) return NextResponse.json({ ignored: `meeting "${obj.topic ?? ""}" is not an attendance meeting` });
   const p = obj.participant ?? {};
-  const email: string | undefined = p.email;
-  if (!email) return NextResponse.json({ ignored: "participant has no email" });
+  const email: string | undefined = p.email || undefined;
+  const display: string = p.user_name ?? "";
 
   const repo = getServiceRepo();
-  const student = await repo.findByRef("zoom", email.toLowerCase());
-  if (!student) return NextResponse.json({ ignored: "unknown participant" });
+  let student = email ? await repo.findByRef("zoom", email.toLowerCase()) : null;
+  const enrol = display.match(/\bMVL\s*-?\s*\d{5,}\b/i)?.[0].replace(/[\s-]/g, "").toUpperCase();
+  if (!student && enrol) student = await repo.findByRef("zoom", enrol);
+  if (!student && norm(display)) {
+    const same = (await repo.students({ status: "all" })).filter((s) => norm(s.full_name) === norm(display));
+    if (same.length === 1) student = same[0];
+  }
+  if (!student) return NextResponse.json({ ignored: "unknown participant", name: display || null });
 
   const joined: string = p.join_time ?? new Date().toISOString();
   const left: string | undefined = body.event === "meeting.participant_left" ? (p.leave_time ?? new Date().toISOString()) : undefined;

@@ -25,7 +25,8 @@ def card(v, extra=False):
         f'<span class="vplay" aria-hidden="true"></span>'
         f'{"<span class=vbadge>Placed</span>" if v["kind"] == "placed" else ""}'
         f"</a>"
-        f'<div class="vmeta"><span class="vname">{esc(v["name"])}</span><span class="vdetail">{esc(v["detail"])}</span></div>'
+        f'<div class="vmeta"><span class="vname" title="{esc(v["name"])}">{esc(v["name"])}</span><span class="vdetail" title="{esc(v["detail"])}">{esc(v["detail"])}</span>'
+        f'<a class="vlink" href="https://www.youtube.com/shorts/{v["id"]}" target="_blank" rel="noopener noreferrer">Watch on YouTube ↗</a></div>'
         f"</li>"
     )
 

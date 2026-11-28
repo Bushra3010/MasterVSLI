@@ -5,6 +5,7 @@ import { addDays, fmtDate, istTime, todayISO } from "@/lib/format";
 import { IRREGULAR_THRESHOLD } from "@/lib/repo";
 import { getRepo } from "@/lib/server";
 import type { AttendanceSource } from "@/lib/types";
+import { attendanceMeetingNames } from "@/lib/integrations/zoom";
 
 export const metadata = { title: "Attendance" };
 
@@ -70,6 +71,26 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
         <Stat label="Biometric check-ins" value={records.filter((r) => r.source === "biometric").length} icon={<Fingerprint size={16} />} />
         <Stat label="Learning hours" value={Math.round(totalMinutes / 60).toLocaleString("en-IN")} tone="green" hint={`${fmtDate(from)} – ${fmtDate(to)}`} />
       </div>
+
+      <Card title="Attendance connections" className="mt-5" bodyClass="p-0 overflow-x-auto">
+        <table className="table">
+          <thead><tr><th>Source</th><th>Status</th><th>What counts</th><th>Address to connect</th></tr></thead>
+          <tbody>
+            {[
+              ["Zoom (live classes)", Boolean(process.env.ZOOM_WEBHOOK_SECRET), `Only meetings named ${attendanceMeetingNames().map((m) => `“${m}”`).join(" or ")}. Students are matched by email, enrollment no. in their Zoom name, or exact full name.`, "/api/webhooks/zoom"],
+              ["TeamViewer (recorded classes)", Boolean(process.env.TEAMVIEWER_API_KEY), "Each recorded session watched, with minutes.", "/api/webhooks/teamviewer"],
+              ["Biometric (classroom)", Boolean(process.env.BIOMETRIC_API_KEY), "First punch of the day is check-in; later punches extend check-out.", "/api/webhooks/biometric"],
+            ].map(([name, on, what, path]) => (
+              <tr key={String(path)}>
+                <td className="font-medium">{name}</td>
+                <td>{on ? <Badge tone="green">Connected</Badge> : <Badge tone="amber">Key not set</Badge>}</td>
+                <td className="text-xs">{what}</td>
+                <td className="font-mono text-xs">{path}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
 
       <div className="mt-5 grid gap-5 xl:grid-cols-3">
         <Card title="Daily report" className="xl:col-span-2" bodyClass="p-0 overflow-x-auto">

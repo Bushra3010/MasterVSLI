@@ -376,9 +376,9 @@ for tpl in TEMPLATES:
 import hashlib, hmac, time
 enroll = re.search(r"MVL\d+", text(get(SP, ADMIN)[2]))[0]
 ZSEC = ENV.get("ZOOM_WEBHOOK_SECRET", "").split("#")[0].strip()
-def zoom(event, email, uuid_):
+def zoom(event, email, uuid_, topic="Regular Meeting", name=None):
     now = dt.datetime.utcnow()
-    body = json.dumps({"event": event, "payload": {"object": {"uuid": uuid_, "participant": {"email": email,
+    body = json.dumps({"event": event, "payload": {"object": {"uuid": uuid_, "topic": topic, "participant": {"email": email, "user_name": name,
            "join_time": (now - dt.timedelta(minutes=95)).strftime("%Y-%m-%dT%H:%M:%SZ"), "leave_time": now.strftime("%Y-%m-%dT%H:%M:%SZ")}}}}).encode()
     ts = str(int(time.time()))
     sig = "v0=" + hmac.new(ZSEC.encode(), f"v0:{ts}:".encode() + body, hashlib.sha256).hexdigest()
@@ -390,6 +390,14 @@ s2, _, r2 = zoom("meeting.participant_left", "e2e.student@example.com", "e2e-mee
 check("zoom join+leave recorded", s1 == 200 and s2 == 200 and b'"ok":true' in r2, (r1 + r2)[:200])
 s, _, raw = http("POST", "/api/webhooks/zoom", "", b'{"event":"meeting.participant_joined","payload":{}}', {"content-type": "application/json", "x-zm-request-timestamp": str(int(time.time())), "x-zm-signature": "v0=bad"})
 check("zoom forged signature rejected", s == 401)
+s, _, raw = zoom("meeting.participant_joined", "e2e.student@example.com", "e2e-other", topic="Weekly staff sync")
+check("zoom: only 'Regular Meeting' counts for attendance", s == 200 and b"not an attendance meeting" in raw, raw[:200])
+s, _, raw = zoom("meeting.participant_joined", "", "e2e-regular-2", topic="  regular   MEETING ", name=f"{enroll} E2E")
+check("zoom: meeting name match ignores case/spaces; student matched by enrollment no. in Zoom name", s == 200 and b'"ok":true' in raw, raw[:200])
+s, _, raw = zoom("meeting.participant_joined", "", "e2e-regular-3", name="E2E Student")
+check("zoom: student matched by exact full name when no email", s == 200 and b'"ok":true' in raw, raw[:200])
+s, _, raw = zoom("meeting.participant_joined", "", "e2e-regular-4", name="Somebody Unknown")
+check("zoom: unknown participant ignored", s == 200 and b"unknown participant" in raw, raw[:200])
 TV = {"content-type": "application/json", "x-api-key": ENV.get("TEAMVIEWER_API_KEY", "").split("#")[0].strip()}
 s, _, raw = http("POST", "/api/webhooks/teamviewer", "", json.dumps({"student_ref": enroll, "recording_id": "rec-e2e", "watched_minutes": 42}).encode(), TV)
 check("teamviewer recording recorded", s == 200 and b'"ok":true' in raw, raw[:200])
