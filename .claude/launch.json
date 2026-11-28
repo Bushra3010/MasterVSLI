@@ -20,6 +20,12 @@
         "PATH=$HOME/.local/node22/bin:$PATH NEXT_PUBLIC_SUPABASE_URL= NEXT_PUBLIC_SUPABASE_ANON_KEY= UPI_VPA=demo-institute@upi npm --prefix web run dev -- -p 3005"
       ],
       "port": 3005
+    },
+    {
+      "name": "website",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["website/serve.mjs", "4321"],
+      "port": 4321
     }
   ]
 }

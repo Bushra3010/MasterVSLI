@@ -1,0 +1,11 @@
+// MasterVLSI public website — static pages served by Cloudflare (no server code).
+{
+  "$schema": "../web/node_modules/wrangler/config-schema.json",
+  "name": "mastervlsi-website",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./public",
+    "html_handling": "drop-trailing-slash",
+    "not_found_handling": "404-page"
+  }
+}

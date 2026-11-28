@@ -57,7 +57,25 @@ export async function addTenantAction(_: ActionResult, form: FormData): Promise<
   await requireFinance();
   let id = "";
   try {
-    if (!s(form, "full_name") || !(num(form, "monthly_rent") > 0) || !s(form, "unit_id") || !s(form, "start_date")) throw new Error("Unit, tenant name, start date and monthly rent are required");
+    if (!s(form, "full_name") || !(num(form, "monthly_rent") > 0) || !s(form, "start_date")) throw new Error("Tenant name, start date and monthly rent are required");
+    let unitId = s(form, "unit_id");
+    // No home yet (or a new one): create the property and the home from the same form.
+    if (!unitId || unitId === "__new") {
+      const code = s(form, "new_unit_code");
+      if (!code) throw new Error("Enter the home name / number (e.g. Home 01) or pick an existing vacant home");
+      const { getStore } = await import("@/lib/session");
+      const db = await getStore();
+      let propertyId = s(form, "new_property_id");
+      if (!propertyId || propertyId === "__new") {
+        const [p] = await db.insert<{ id: string; name: string; city: string | null; created_at: string }>("properties", [{ name: s(form, "new_property_name") || "Rental property", city: opt(form, "new_property_city"), created_at: new Date().toISOString() }]);
+        propertyId = p.id;
+      } else if (!(await db.select<{ id: string }>("properties", { eq: { id: propertyId } })).length) throw new Error("Choose the property for the new home");
+      const clash = await db.select<{ id: string }>("property_units", { eq: { property_id: propertyId, code } });
+      if (clash.length) throw new Error(`${code} already exists in that property — pick it from the list instead`);
+      const [u] = await db.insert<{ id: string; property_id: string; code: string; unit_type: string | null; floor: string | null; status: string; created_at: string }>("property_units", [{ property_id: propertyId, code, unit_type: opt(form, "new_unit_type"), floor: opt(form, "new_unit_floor"), status: "vacant", created_at: new Date().toISOString() }]);
+      unitId = u.id;
+    }
+    form.set("unit_id", unitId);
     const fin = await getFinance();
     const t = await fin.addTenant(
       {

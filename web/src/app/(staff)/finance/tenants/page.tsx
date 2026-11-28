@@ -98,12 +98,14 @@ export default async function TenantsPage() {
         </Card>
 
         <Card title="Add tenant" icon={<Plus size={15} />} className="xl:col-span-2">
-          {vacant.length ? (
             <ActionForm action={addTenantAction} submit="Add tenant">
               <div className="grid gap-3 sm:grid-cols-3">
                 <div>
                   <label className="label" htmlFor="unit_id">Home / unit *</label>
-                  <select id="unit_id" name="unit_id" required className="input">{vacant.map((u) => <option key={u.id} value={u.id}>{u.code}{u.unit_type ? ` · ${u.unit_type}` : ""}</option>)}</select>
+                  <select id="unit_id" name="unit_id" defaultValue={vacant[0]?.id ?? "__new"} className="input">
+                    {vacant.map((u) => <option key={u.id} value={u.id}>{u.code}{u.unit_type ? ` · ${u.unit_type}` : ""}</option>)}
+                    <option value="__new">+ New home (fill in below)</option>
+                  </select>
                 </div>
                 <FIELD label="Tenant full name *" name="full_name" required />
                 <FIELD label="Mobile" name="phone" />
@@ -121,6 +123,22 @@ export default async function TenantsPage() {
                 <div className="flex items-end gap-4 pb-2 text-sm">
                   <label className="flex items-center gap-1.5"><input type="checkbox" name="kyc_verified" /> KYC verified</label>
                   <label className="flex items-center gap-1.5"><input type="checkbox" name="police_verified" /> Police verified</label>
+                </div>
+              </div>
+              <div className="rounded-[5px] border border-dashed border-line bg-slate-50 p-3">
+                <div className="mb-2 text-xs font-semibold text-muted uppercase">New home {vacant.length ? "(only when “+ New home” is chosen above)" : "— no vacant homes yet, add it here"}</div>
+                <div className="grid gap-3 sm:grid-cols-5">
+                  <div>
+                    <label className="label" htmlFor="new_property_id">Property</label>
+                    <select id="new_property_id" name="new_property_id" defaultValue={d.properties[0]?.id ?? "__new"} className="input">
+                      {d.properties.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      <option value="__new">+ New property</option>
+                    </select>
+                  </div>
+                  <FIELD label="New property name" name="new_property_name" placeholder="e.g. Vijayanagar Homes" />
+                  <FIELD label="City" name="new_property_city" placeholder="Mysuru" />
+                  <FIELD label="Home name / no. *" name="new_unit_code" placeholder="Home 01" />
+                  <FIELD label="Type" name="new_unit_type" placeholder="2BHK" />
                 </div>
               </div>
               <div className="border-t border-line pt-3 text-xs font-semibold text-muted uppercase">Agreement & rent</div>
@@ -142,9 +160,6 @@ export default async function TenantsPage() {
                 <RefSelect name="deposit_account" label="Deposit received into" options={refs.filter((r) => r.ref.startsWith("account:"))} />
               </div>
             </ActionForm>
-          ) : (
-            <p className="text-sm text-muted">All homes are occupied. Add a home below to take a new tenant.</p>
-          )}
         </Card>
 
         <Card title="Properties & homes">

@@ -7,6 +7,8 @@ import { getRepo } from "@/lib/server";
 import type { Appraisal, Branch, StaffAttStatus } from "@/lib/types";
 import { saveRowAction } from "../crm-actions";
 import { saveStaffAction } from "../actions";
+import { AddStaffForm } from "@/components/add-staff-form";
+import { Flash } from "@/components/student360";
 import { addLeaveAction, addTaskAction, decideLeaveAction, generatePayrollAction, markPayrollPaidAction, markStaffAttendanceAction, toggleTaskAction } from "../module-actions";
 
 export const metadata = { title: "Staff & HR" };
@@ -58,6 +60,11 @@ export default async function HrPage({ searchParams }: PageProps<"/hr">) {
           </div>
         }
       />
+      <Flash sp={sp} />
+      <Card title={`Add staff member — ${company === "enrich" ? "Enrich Silicon" : "MasterVLSI"}`} icon={<UserRound size={15} />} className="mb-5">
+        <div id="add-staff" className="scroll-mt-24"><AddStaffForm back={`/hr?company=${company}`} company={company} /></div>
+        {!staff.length && <p className="mt-2 text-xs text-brand">No staff yet. Add your team here; they then appear in letters, tasks, payroll, lead allocation and the calendar.</p>}
+      </Card>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Staff" value={staff.length} />
         <Stat label="Present today" value={todayMarks.filter((m) => m === "present" || m === "half_day").length} tone="green" hint={`${todayMarks.filter((m) => !m).length} not marked`} />

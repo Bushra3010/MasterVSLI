@@ -331,3 +331,42 @@ export async function deleteDocumentAction(docId: string) {
   await repo.removeDocument(docId);
   revalidatePath("/", "layout");
 }
+
+/**
+ * Add a staff member from anywhere a staff list is needed (Staff & HR, letters).
+ * The employee code is generated when left blank; problems come back as a message instead of an error page.
+ */
+export async function addStaffAction(form: FormData) {
+  await requireStaff();
+  const backTo = String(form.get("back") ?? "");
+  const base = /^\/(documents|hr)(\?|$)/.test(backTo) ? backTo.split("#")[0].replace(/[?&](saved|error|staff_added)=[^&]*/g, "") : "/hr";
+  const go = (k: "saved" | "error", msg: string, extra = ""): never => redirect(`${base}${base.includes("?") ? "&" : "?"}${k}=${encodeURIComponent(msg)}${extra}`);
+  const full_name = text(form, "full_name");
+  if (!full_name || full_name.length < 2) go("error", "Enter the staff member's full name.");
+  const email = text(form, "email");
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) go("error", "Enter a valid email address.");
+  const phone = text(form, "phone");
+  if (phone && phone.replace(/\D/g, "").length < 10) go("error", "Enter a 10-digit mobile number.");
+  const salary = text(form, "monthly_salary");
+  if (salary && !(Number(salary) >= 0)) go("error", "Monthly salary must be a number.");
+  const repo = await getRepo();
+  const all = await repo.staff();
+  let code = (text(form, "employee_code") ?? "").toUpperCase();
+  if (code && all.some((s) => s.employee_code?.toUpperCase() === code)) go("error", `Employee code ${code} is already used.`);
+  if (!code) {
+    const max = Math.max(0, ...all.map((s) => Number(s.employee_code?.match(/(\d+)$/)?.[1] ?? 0)));
+    code = `MVE${String(max + 1).padStart(3, "0")}`;
+  }
+  try {
+    await repo.saveStaff({
+      full_name: full_name!, employee_code: code, designation: text(form, "designation"), department: text(form, "department"),
+      joining_date: text(form, "joining_date"), monthly_salary: salary ? Number(salary) : null, email, phone,
+      company: text(form, "company") === "enrich" ? "enrich" : "mastervlsi",
+    });
+  } catch (e) {
+    go("error", `Could not save: ${e instanceof Error ? e.message : "unknown error"}`);
+  }
+  revalidatePath("/", "layout");
+  const added = (await repo.staff()).find((s) => s.employee_code === code);
+  go("saved", `${full_name} added (${code}).`, added ? `&staff_added=${added.id}` : "");
+}
