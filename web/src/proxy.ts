@@ -27,8 +27,10 @@ export async function proxy(request: NextRequest) {
       },
     },
   });
-  const { data } = await supabase.auth.getUser();
-  if (!data.user && !isPublic) return NextResponse.redirect(new URL("/login", request.url));
+  // Only gate on whether a login cookie exists (refreshing it when it has expired). Reading the cookie needs no
+  // network call; every page still verifies the user with Supabase (getUser in lib/session) before showing data.
+  const { data } = await supabase.auth.getSession();
+  if (!data.session && !isPublic) return NextResponse.redirect(new URL("/login", request.url));
   return response;
 }
 

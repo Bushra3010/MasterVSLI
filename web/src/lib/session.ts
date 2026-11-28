@@ -38,12 +38,18 @@ export const getSession = cache(async (): Promise<Session | null> => {
     return null;
   }
   const db = await supabaseServer();
-  const { data } = await db.auth.getUser();
+  // Look up the profile at the same time as verifying the login (saves one database round trip per page).
+  // The cookie's user id is only a hint for that lookup: nothing is returned unless getUser() — the server-side
+  // check — confirms the same user, and the lookups themselves run under the user's own (database-verified) token.
+  const hinted = (await db.auth.getSession()).data.session?.user?.id;
+  const lookup = (id: string) =>
+    Promise.all([
+      db.from("profiles").select("role, full_name").eq("id", id).maybeSingle(),
+      db.from("students").select("id, full_name").eq("user_id", id).maybeSingle(),
+    ]);
+  const [{ data }, early] = await Promise.all([db.auth.getUser(), hinted ? lookup(hinted) : Promise.resolve(null)]);
   if (!data.user) return null;
-  const [{ data: profile }, { data: student }] = await Promise.all([
-    db.from("profiles").select("role, full_name").eq("id", data.user.id).maybeSingle(),
-    db.from("students").select("id, full_name").eq("user_id", data.user.id).maybeSingle(),
-  ]);
+  const [{ data: profile }, { data: student }] = early && hinted === data.user.id ? early : await lookup(data.user.id);
   const role: Role = ["super_admin", "admin", "staff", "college"].includes(profile?.role) ? (profile!.role as Role) : "student";
   let collegeId: string | undefined;
   if (role === "college") {
